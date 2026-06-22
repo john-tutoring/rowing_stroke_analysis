@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Rowing score test</title>
+</head>
+<body>
+  <h1>Rowing score (local test)</h1>
+  <p>Upload a short rowing video. Max about 100 MB (~2 minutes).</p>
+
+  <form id="form">
+    <input type="file" id="video" name="video" accept="video/*" required>
+    <button type="submit">Upload and score</button>
+  </form>
+
+  <p id="status"></p>
+  <pre id="out"></pre>
+
+  <script>
+    const form = document.getElementById("form");
+    const status = document.getElementById("status");
+    const out = document.getElementById("out");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const file = document.getElementById("video").files[0];
+      if (!file) return;
+
+      status.textContent = "Uploading and processing… (can take a minute)";
+      out.textContent = "";
+
+      const body = new FormData();
+      body.append("video", file);
+
+      try {
+        const res = await fetch("/predict", { method: "POST", body });
+        const data = await res.json();
+        status.textContent = "Strokes detected: " + (data.strokes_detected ?? "—");
+        out.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        status.textContent = "Request failed.";
+        out.textContent = String(err);
+      }
+    });
+  </script>
+</body>
+</html>

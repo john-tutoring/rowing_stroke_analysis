@@ -36,19 +36,25 @@ def get_movie_files(directory: str) -> list[str]:
     ]
 
 
-def joints_from_video(filename: str, video_index: int, times: TimingStats) -> np.ndarray:
+def joints_from_video(
+    filename: str,
+    video_index: int,
+    times: TimingStats,
+    rowing_grade: int | None = None,
+) -> np.ndarray:
     """
     Read ``filename``, run pose on every ``FRAME_MODULUS``-th frame, return smoothed landmarks.
 
     Each row is ``[video_index, rowing_grade, x, y, z, ...]`` for 33 joints.
-    ``rowing_grade`` is parsed from digits immediately before the file extension.
+    ``rowing_grade`` comes from the argument, or digits before the extension in ``filename``.
     """
     frame_reader = cv2.VideoCapture(filename)
     pose = mp.solutions.pose.Pose(static_image_mode=False, model_complexity=0)
-    match = re.search(r"(\d+)(?=\.)", filename)
-    if match is None:
-        raise ValueError(f"No grade digits before extension in filename: {filename}")
-    rowing_grade = int(match.group(1))
+    if rowing_grade is None:
+        match = re.search(r"(\d+)(?=\.)", filename)
+        if match is None:
+            raise ValueError(f"No grade digits before extension in filename: {filename}")
+        rowing_grade = int(match.group(1))
     all_landmarks: list[list[float]] = []
     frame_index = 0
 

@@ -145,5 +145,5 @@ if __name__ == "__main__":
     per_cycle_data = np.genfromtxt("cycle_data.csv", delimiter=",", skip_header=1)
     cycles = faster_index_by_0_column(per_cycle_data)
     features = np.array(features_from_cycles(cycles, DEFAULT_FEATURE_EXTRACTORS))
-    features = whiten(features)
+    features = whiten(features) # do I need to whiten it?
     print(features.shape)

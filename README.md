@@ -39,6 +39,17 @@ python model_compare.py
 python model_compare.py
 ```
 
+## Local web test
+
+After `cycle_data.csv` exists:
+
+```bash
+pip install flask
+python app.py
+```
+
+Open http://127.0.0.1:5000 — upload a video, get JSON with stroke count and Ridge predictions. Files land in `uploads/`.
+
 Models included: dummy baseline, Ridge, linear/RBF SVR (or SVC), k-NN, shallow random forest. Features are scaled inside each CV fold (no global whitening leakage).
 
 ## Project layout
