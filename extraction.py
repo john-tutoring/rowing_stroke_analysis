@@ -85,13 +85,6 @@ def joints_from_video(
     return smooth_data(landmark_array)
 
 
-def normalize_columns(arr: np.ndarray) -> np.ndarray:
-    """Min-max normalize each column of ``arr`` to [0, 1]."""
-    column_mins = arr.min(axis=0)
-    column_maxes = arr.max(axis=0)
-    return (arr - column_mins) / (column_maxes - column_mins)
-
-
 def joints_from_videos(files: list[str], times: TimingStats | None) -> np.ndarray:
     """Extract and stack smoothed landmark rows from every path in ``files``."""
     if times is None:

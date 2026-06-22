@@ -113,24 +113,6 @@ def knee_min_accel_timing(one_cycle_data: CycleArray) -> float:
     return float(np.argmin(np.abs(accel)) / len(accel))
 
 
-def whiten(x: np.ndarray, eps: float = 1e-8) -> np.ndarray:
-    """PCA-style whitening: zero mean, unit variance along principal components."""
-    x_arr = np.asarray(x, dtype=np.float64)
-    x_centered = x_arr - x_arr.mean(axis=0, keepdims=True)
-    cov = np.cov(x_centered, rowvar=False)
-    eigvals, eigvecs = np.linalg.eigh(cov)
-    idx = np.argsort(eigvals)[::-1]
-    eigvals = eigvals[idx]
-    eigvecs = eigvecs[:, idx]
-    whitening_matrix = eigvecs @ np.diag(1.0 / np.sqrt(eigvals + eps))
-    return x_centered @ whitening_matrix
-
-
-def column_norm(arr: np.ndarray) -> np.ndarray:
-    """Min-max normalize each column of ``arr`` to [0, 1]."""
-    return (arr - arr.min(axis=0)) / (arr.max(axis=0) - arr.min(axis=0))
-
-
 DEFAULT_FEATURE_EXTRACTORS: list[FeatureExtractor] = [
     max_hip_angle,
     min_hip_angle,
@@ -145,5 +127,4 @@ if __name__ == "__main__":
     per_cycle_data = np.genfromtxt("cycle_data.csv", delimiter=",", skip_header=1)
     cycles = faster_index_by_0_column(per_cycle_data)
     features = np.array(features_from_cycles(cycles, DEFAULT_FEATURE_EXTRACTORS))
-    features = whiten(features) # do I need to whiten it?
     print(features.shape)
