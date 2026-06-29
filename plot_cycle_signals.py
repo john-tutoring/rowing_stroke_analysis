@@ -1,141 +1,118 @@
-"""Plot cycle split signal, hip angle, and timing-feature events for one stroke."""
+"""Plot the cycle-split signal for a video with peak markers at stroke boundaries."""
 
 from __future__ import annotations
 
+import argparse
+import sys
+from pathlib import Path
+
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import find_peaks
 
-import feature_extraction as fe
-from split_strokes import faster_index_by_0_column, x_dif_between_points
+from extraction import TimingStats, joints_from_video
+from split_strokes import x_dif_between_points
 
-# Change this to inspect a different stroke in cycle_data.csv
-CYCLE_INDEX = 0
+# Must match split_strokes.split_cycles
+PEAK_DISTANCE = 10
+PEAK_PROMINENCE = 0.3
 
-
-def timing_frame_indices(cycle: fe.CycleArray) -> dict[str, int]:
-    """
-    Return the frame index for each normalized timing feature.
-
-    Matches the argmax/argmin logic in ``feature_extraction`` timing extractors.
-    """
-    hip = fe.get_angle_vector(cycle, "knee", "hip", "shoulder")
-    elbow = fe.get_angle_vector(cycle, "wrist", "elbow", "shoulder")
-    knee = fe.get_angle_vector(cycle, "ankle", "knee", "hip")
-
-    hip_accel = np.gradient(np.gradient(hip))
-    elbow_accel = np.gradient(np.gradient(elbow))
-    knee_accel = np.gradient(np.gradient(knee))
-
-    return {
-        "hip max velocity": int(np.argmax(np.gradient(hip))),
-        "hip max accel": int(np.argmax(hip_accel)),
-        "elbow max accel": int(np.argmax(elbow_accel)),
-        "knee min |accel|": int(np.argmin(np.abs(knee_accel))),
-    }
+PLOT_SUFFIX = "_cycle_split.png"
 
 
-def plot_cycle(
-    cycle: fe.CycleArray,
-    cycle_index: int = 0,
+def default_plot_path(video_path: Path) -> Path:
+    """e.g. WomanRowing_85.mp4 → WomanRowing_85_cycle_split.png (next to the video)."""
+    return video_path.with_name(f"{video_path.stem}{PLOT_SUFFIX}")
+
+
+def split_signal_from_video(video_path: str) -> np.ndarray:
+    """Extract pose landmarks and return the wrist–ankle X difference per frame."""
+    timing: TimingStats = {"cv2": 0.0, "mediapipe": 0.0}
+    frames = joints_from_video(video_path, 0, timing, rowing_grade=0)
+    if frames.size == 0:
+        raise ValueError("No pose detected in video.")
+
+    # Drop video index; keep grade + joints (same layout as split_strokes input)
+    arr = frames[:, 1:]
+    return x_dif_between_points(arr, "wrist", "ankle")
+
+
+def cycle_split_peaks(signal: np.ndarray) -> np.ndarray:
+    """Peak frame indices used to slice stroke cycles (same logic as split_cycles)."""
+    peaks, _ = find_peaks(signal, distance=PEAK_DISTANCE, prominence=PEAK_PROMINENCE)
+    return peaks
+
+
+def plot_split_signal(
+    signal: np.ndarray,
+    peaks: np.ndarray,
     *,
-    show_peaks: bool = True,
+    title: str,
+    output_path: Path,
 ) -> None:
-    """
-    Draw wrist–ankle X (split signal) and hip angle vs frame, with timing markers.
+    """Line plot of the split metric with x markers at cycle boundaries."""
+    frames = np.arange(len(signal))
 
-    Timing markers are placed on the hip-angle axis at the corresponding frame.
-    Elbow and knee timings use their own angle at that frame for the marker height.
-    """
-    frames = np.arange(cycle.shape[0])
-    split_signal = x_dif_between_points(cycle, "wrist", "ankle")
-    hip_angles = fe.get_angle_vector(cycle, "knee", "hip", "shoulder")
-    elbow_angles = fe.get_angle_vector(cycle, "wrist", "elbow", "shoulder")
-    knee_angles = fe.get_angle_vector(cycle, "ankle", "knee", "hip")
-
-    timings = timing_frame_indices(cycle)
-    angle_at_timing = {
-        "hip max velocity": hip_angles[timings["hip max velocity"]],
-        "hip max accel": hip_angles[timings["hip max accel"]],
-        "elbow max accel": elbow_angles[timings["elbow max accel"]],
-        "knee min |accel|": knee_angles[timings["knee min |accel|"]],
-    }
-
-    marker_style = {
-        "hip max velocity": ("o", "#2ca02c"),
-        "hip max accel": ("s", "#d62728"),
-        "elbow max accel": ("^", "#9467bd"),
-        "knee min |accel|": ("D", "#ff7f0e"),
-    }
-
-    fig, ax_split = plt.subplots(figsize=(11, 5))
-    ax_hip = ax_split.twinx()
-
-    ax_split.plot(
-        frames,
-        split_signal,
-        color="#1f77b4",
-        linewidth=1.5,
-        label="R wrist X − R ankle X (split signal)",
-    )
-    ax_hip.plot(
-        frames,
-        hip_angles,
-        color="#e377c2",
-        linewidth=1.5,
-        label="Hip angle (knee–hip–shoulder)",
+    fig, ax = plt.subplots(figsize=(11, 4))
+    ax.plot(frames, signal, color="#1f77b4", linewidth=1.5, label="R wrist X − R ankle X")
+    ax.plot(
+        peaks,
+        signal[peaks],
+        "x",
+        color="#d62728",
+        markersize=7,
+        markeredgewidth=1.5,
+        linestyle="none",
+        label="Cycle split (peaks)",
     )
 
-    if show_peaks:
-        peaks, _ = find_peaks(split_signal, distance=10, prominence=0.3)
-        ax_split.plot(
-            peaks,
-            split_signal[peaks],
-            "x",
-            color="#1f77b4",
-            markersize=8,
-            label="Split peaks",
-        )
-
-    for name, frame_idx in timings.items():
-        shape, color = marker_style[name]
-        ax_hip.scatter(
-            frame_idx,
-            angle_at_timing[name],
-            marker=shape,
-            s=90,
-            color=color,
-            edgecolors="black",
-            linewidths=0.6,
-            zorder=5,
-            label=name,
-        )
-
-    grade = cycle[0, 0]
-    ax_split.set_xlabel("Frame (within cycle)")
-    ax_split.set_ylabel("Wrist − ankle X")
-    ax_hip.set_ylabel("Angle (degrees)")
-    ax_split.set_title(f"Cycle {cycle_index}  ·  row grade {grade:g}")
-
-    lines1, labels1 = ax_split.get_legend_handles_labels()
-    lines2, labels2 = ax_hip.get_legend_handles_labels()
-    ax_split.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=8)
-
+    ax.set_xlabel("Sampled frame")
+    ax.set_ylabel("Wrist X − ankle X")
+    ax.set_title(title)
+    ax.legend(loc="upper right")
     fig.tight_layout()
-    plt.show()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
 
 
-def load_cycles(path: str = "cycle_data.csv") -> list[np.ndarray]:
-    """Load cycles from CSV."""
-    data = np.genfromtxt(path, delimiter=",", skip_header=1)
-    return faster_index_by_0_column(data)
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        description="Plot wrist–ankle X split signal for a rowing video.",
+    )
+    parser.add_argument("video", type=Path, help="Path to a video file")
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=None,
+        help=f"Output PNG path (default: <video_stem>{PLOT_SUFFIX} beside the video)",
+    )
+    args = parser.parse_args(argv)
+
+    video_path = args.video.expanduser().resolve()
+    if not video_path.is_file():
+        raise SystemExit(f"Video not found: {video_path}")
+
+    output_path = (
+        args.output.expanduser().resolve()
+        if args.output is not None
+        else default_plot_path(video_path)
+    )
+
+    signal = split_signal_from_video(str(video_path))
+    peaks = cycle_split_peaks(signal)
+    if len(peaks) < 2:
+        print(
+            f"Warning: only {len(peaks)} peak(s) found; need at least 2 to form a cycle.",
+            file=sys.stderr,
+        )
+
+    plot_split_signal(signal, peaks, title=video_path.name, output_path=output_path)
+    print(output_path)
 
 
 if __name__ == "__main__":
-    cycles = load_cycles()
-    if not cycles:
-        raise SystemExit("No cycles found. Run extraction.py and split_strokes.py first.")
-    if CYCLE_INDEX < 0 or CYCLE_INDEX >= len(cycles):
-        raise SystemExit(f"CYCLE_INDEX must be 0..{len(cycles) - 1}, got {CYCLE_INDEX}")
-
-    plot_cycle(cycles[CYCLE_INDEX], CYCLE_INDEX)
+    main()
