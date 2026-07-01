@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
 from time import time
 from typing import TypedDict
 
 import cv2
 import mediapipe as mp
 import numpy as np
+from mediapipe.tasks.python import BaseOptions, vision
 
 import joint_info
 
-MODEL_PATH: str = "./pose_landmarker_lite.task"
+MODEL_PATH: Path = Path(__file__).resolve().parent / "pose_landmarker_lite.task"
 VIDEO_DIRECTORY: str = "./SampleVideos"
 FRAME_MODULUS: int = 2
 RESIZE_TARGET: int = 256
@@ -48,39 +50,57 @@ def joints_from_video(
     Each row is ``[video_index, rowing_grade, x, y, z, ...]`` for 33 joints.
     ``rowing_grade`` comes from the argument, or digits before the extension in ``filename``.
     """
-    frame_reader = cv2.VideoCapture(filename)
-    pose = mp.solutions.pose.Pose(static_image_mode=False, model_complexity=0)
+    if not MODEL_PATH.is_file():
+        raise FileNotFoundError(f"Pose model not found: {MODEL_PATH}")
+
     if rowing_grade is None:
         match = re.search(r"(\d+)(?=\.)", filename)
         if match is None:
             raise ValueError(f"No grade digits before extension in filename: {filename}")
         rowing_grade = int(match.group(1))
+
+    options = vision.PoseLandmarkerOptions(
+        base_options=BaseOptions(model_asset_path=str(MODEL_PATH)),
+        running_mode=vision.RunningMode.VIDEO,
+        num_poses=1,
+    )
+    landmarker = vision.PoseLandmarker.create_from_options(options)
+
+    frame_reader = cv2.VideoCapture(filename)
+    fps = frame_reader.get(cv2.CAP_PROP_FPS) or 30.0
     all_landmarks: list[list[float]] = []
     frame_index = 0
 
-    while frame_reader.isOpened():
-        cv2_start = time()
-        ret, frame = frame_reader.read()
-        if not ret:
-            break
-        frame_index += 1
+    try:
+        while frame_reader.isOpened():
+            cv2_start = time()
+            ret, frame = frame_reader.read()
+            if not ret:
+                break
+            frame_index += 1
 
-        if frame_index % FRAME_MODULUS != 0:
+            if frame_index % FRAME_MODULUS != 0:
+                times["cv2"] += time() - cv2_start
+                continue
+
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             times["cv2"] += time() - cv2_start
-            continue
 
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        times["cv2"] += time() - cv2_start
+            mediapipe_start = time()
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
+            timestamp_ms = int((frame_index / fps) * 1000)
+            result = landmarker.detect_for_video(mp_image, timestamp_ms)
+            times["mediapipe"] += time() - mediapipe_start
 
-        mediapipe_start = time()
-        results = pose.process(frame_rgb)
-        times["mediapipe"] += time() - mediapipe_start
-        if results.pose_landmarks:
-            frame_landmarks: list[float] = [float(video_index), float(rowing_grade)]
-            for lm in results.pose_landmarks.landmark:
-                frame_landmarks.extend((lm.x, lm.y, lm.z))
-            all_landmarks.append(frame_landmarks)
-    frame_reader.release()
+            if result.pose_landmarks:
+                frame_landmarks: list[float] = [float(video_index), float(rowing_grade)]
+                for lm in result.pose_landmarks[0]:
+                    frame_landmarks.extend((lm.x, lm.y, lm.z))
+                all_landmarks.append(frame_landmarks)
+    finally:
+        frame_reader.release()
+        landmarker.close()
+
     landmark_array = np.array(all_landmarks, dtype=np.float64)
     return smooth_data(landmark_array)
 

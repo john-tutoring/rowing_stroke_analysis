@@ -14,7 +14,7 @@ pip install -r requirements.txt
 
 Place rowing videos in `SampleVideos/`. Filenames should include the grade/score as digits before the extension (e.g. `athlete_85.mp4` → grade `85`), matching the regex in `extraction.py`.
 
-MediaPipe may download model assets on first run. For pose extraction you may also need `pose_landmarker_lite.task` in the project root if you switch to the Tasks API path in `extraction.py`.
+Pose extraction uses MediaPipe Tasks with `pose_landmarker_lite.task` in the project root.
 
 ## Pipeline
 
