@@ -9,7 +9,7 @@ from sklearn.linear_model import Ridge
 from sklearn.model_selection import KFold, cross_validate
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler, MinMaxScaler
 from sklearn.svm import SVR
 
 import feature_extraction as fe
@@ -19,21 +19,21 @@ FEATURE_EXTRACTORS: list[fe.FeatureExtractor] = list(fe.DEFAULT_FEATURE_EXTRACTO
 
 MODELS: dict[str, Pipeline] = {
     "dummy_mean": Pipeline([("model", DummyRegressor(strategy="mean"))]),
-    "ridge": Pipeline([("scale", StandardScaler()), ("model", Ridge(alpha=1.0))]),
+    "ridge": Pipeline([("scale", MinMaxScaler()), ("model", Ridge(alpha=1.0))]),
     "svr_linear": Pipeline([
-        ("scale", StandardScaler()),
+        ("scale", MinMaxScaler()),
         ("model", SVR(kernel="linear", C=1.0)),
     ]),
     "svr_rbf": Pipeline([
-        ("scale", StandardScaler()),
+        ("scale", MinMaxScaler()),
         ("model", SVR(kernel="rbf", C=1.0, epsilon=0.1)),
     ]),
     "knn_5": Pipeline([
-        ("scale", StandardScaler()),
+        ("scale", MinMaxScaler()),
         ("model", KNeighborsRegressor(n_neighbors=5)),
     ]),
     "rf_shallow": Pipeline([
-        ("scale", StandardScaler()),
+        ("scale", MinMaxScaler()),
         (
             "model",
             RandomForestRegressor(

@@ -42,7 +42,7 @@ def get_angle_vector(
     joint1: str,
     joint2: str,
     joint3: str,
-    right_hand: bool = True,
+    right_hand: bool = False,
 ) -> np.ndarray:
     """
     Per-frame angles at ``joint2`` (vertex) for joints ``joint1`` and ``joint3``.
@@ -118,7 +118,7 @@ DEFAULT_FEATURE_EXTRACTORS: list[FeatureExtractor] = [
     min_hip_angle,
     fastest_hip_accel_timing,
     fastest_hip_velocity_timing,
-    fastest_elbow_accel_timing,
+    # fastest_elbow_accel_timing,
     knee_min_accel_timing,
 ]
 
