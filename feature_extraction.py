@@ -122,6 +122,8 @@ DEFAULT_FEATURE_EXTRACTORS: list[FeatureExtractor] = [
     knee_min_accel_timing,
 ]
 
+FEATURE_NAMES: list[str] = [fn.__name__ for fn in DEFAULT_FEATURE_EXTRACTORS]
+
 
 if __name__ == "__main__":
     per_cycle_data = np.genfromtxt("cycle_data.csv", delimiter=",", skip_header=1)

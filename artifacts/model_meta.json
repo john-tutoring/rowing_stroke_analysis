@@ -1,0 +1,14 @@
+{
+  "model": "ridge",
+  "alpha": 1.0,
+  "scaler": "MinMaxScaler",
+  "n_samples": 140,
+  "n_features": 5,
+  "feature_names": [
+    "max_hip_angle",
+    "min_hip_angle",
+    "fastest_hip_accel_timing",
+    "fastest_hip_velocity_timing",
+    "knee_min_accel_timing"
+  ]
+}

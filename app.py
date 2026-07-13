@@ -1,8 +1,13 @@
-+"""
-Tiny local server: upload a rowing video, run the pipeline, return Ridge scores as JSON.
+"""
+Local / Railway web app: upload a rowing video → stroke scores as JSON.
 
-Run:  python app.py
-Open: http://127.0.0.1:5000
+Loads a pre-fitted sklearn Pipeline from artifacts/model.joblib (no online training).
+
+Local:
+  python export_model.py   # once, after cycle_data.csv exists
+  python app.py            # or: gunicorn -b 0.0.0.0:8080 -t 120 app:app
+
+Docker / Railway: gunicorn is the process (see Dockerfile).
 """
 
 from __future__ import annotations
@@ -10,49 +15,39 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import joblib
 import numpy as np
 from flask import Flask, jsonify, request, send_from_directory
-from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
 
 import feature_extraction as fe
 from extraction import TimingStats, joints_from_video
-from model_compare import build_xy, load_cycles
 from split_strokes import split_cycles
 
 APP_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = APP_DIR / "uploads"
+MODEL_PATH = Path(os.environ.get("MODEL_PATH", APP_DIR / "artifacts" / "model.joblib"))
 # ~100 MB — plenty for a typical 2-minute phone video
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
-
-FEATURE_NAMES = [
-    "max_hip_angle",
-    "min_hip_angle",
-    "fastest_hip_accel_timing",
-    "fastest_hip_velocity_timing",
-    "fastest_elbow_accel_timing",
-    "knee_min_accel_timing",
-]
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
 
-ridge_model: Pipeline | None = None
+
+def load_model(path: Path = MODEL_PATH) -> Pipeline:
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Model not found: {path}. Run `python export_model.py` locally "
+            "and ensure artifacts/model.joblib is in the image."
+        )
+    model = joblib.load(path)
+    if not isinstance(model, Pipeline):
+        raise TypeError(f"Expected sklearn Pipeline in {path}, got {type(model)}")
+    return model
 
 
-def train_ridge() -> Pipeline:
-    """Fit Ridge on cycle_data.csv (same setup as model_compare)."""
-    cycles = load_cycles(str(APP_DIR / "cycle_data.csv"))
-    if not cycles:
-        raise RuntimeError("Need cycle_data.csv — run extraction.py and split_strokes.py first.")
-    x, y = build_xy(cycles, fe.DEFAULT_FEATURE_EXTRACTORS)
-    pipe = Pipeline([
-        ("scale", StandardScaler()),
-        ("model", Ridge(alpha=1.0)),
-    ])
-    pipe.fit(x, y)
-    return pipe
+# Loaded at import time so gunicorn workers have the model ready
+model: Pipeline = load_model()
 
 
 def video_to_predictions(video_path: str) -> dict:
@@ -69,14 +64,23 @@ def video_to_predictions(video_path: str) -> dict:
         return {"error": "No rowing strokes detected."}
 
     x = np.array(fe.features_from_cycles(cycles, fe.DEFAULT_FEATURE_EXTRACTORS), dtype=np.float64)
-    preds = ridge_model.predict(x)
+    if x.shape[1] != len(fe.FEATURE_NAMES):
+        return {
+            "error": (
+                f"Feature count mismatch: got {x.shape[1]}, expected {len(fe.FEATURE_NAMES)}."
+            ),
+        }
+
+    preds = model.predict(x)
 
     strokes = []
     for i, (pred, feat_row) in enumerate(zip(preds, x)):
         strokes.append({
             "stroke": i + 1,
             "predicted_grade": round(float(pred), 2),
-            "features": {name: round(float(v), 4) for name, v in zip(FEATURE_NAMES, feat_row)},
+            "features": {
+                name: round(float(v), 4) for name, v in zip(fe.FEATURE_NAMES, feat_row)
+            },
         })
 
     return {
@@ -89,6 +93,11 @@ def video_to_predictions(video_path: str) -> dict:
 @app.route("/")
 def index():
     return send_from_directory(APP_DIR, "index.html")
+
+
+@app.route("/health")
+def health():
+    return jsonify({"ok": True, "model_loaded": True})
 
 
 @app.route("/predict", methods=["POST"])
@@ -109,6 +118,11 @@ def predict():
         result = video_to_predictions(str(dest))
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+    finally:
+        try:
+            dest.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     if "error" in result:
         return jsonify(result), 400
@@ -117,7 +131,7 @@ def predict():
 
 
 if __name__ == "__main__":
-    print("Training Ridge on cycle_data.csv ...")
-    ridge_model = train_ridge()
-    print("Ready. Open http://127.0.0.1:5000")
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    port = int(os.environ.get("PORT", "5000"))
+    print(f"Model: {MODEL_PATH}")
+    print(f"Ready. Open http://127.0.0.1:{port}")
+    app.run(host="0.0.0.0", port=port, debug=False)
