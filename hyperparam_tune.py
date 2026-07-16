@@ -6,8 +6,12 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 import numpy as np
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import Ridge
+from sklearn.ensemble import (
+    ExtraTreesRegressor,
+    GradientBoostingRegressor,
+    RandomForestRegressor,
+)
+from sklearn.linear_model import BayesianRidge, ElasticNet, HuberRegressor, Lasso, Ridge
 from sklearn.model_selection import KFold, cross_validate
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.pipeline import Pipeline
@@ -77,6 +81,52 @@ def _ridge(params: dict[str, Any]) -> Pipeline:
     ])
 
 
+def _lasso(params: dict[str, Any]) -> Pipeline:
+    return Pipeline([
+        ("scale", MinMaxScaler()),
+        ("model", Lasso(alpha=float(params.get("alpha", 0.1)))),
+    ])
+
+
+def _elasticnet(params: dict[str, Any]) -> Pipeline:
+    return Pipeline([
+        ("scale", MinMaxScaler()),
+        (
+            "model",
+            ElasticNet(
+                alpha=float(params.get("alpha", 0.1)),
+                l1_ratio=float(params.get("l1_ratio", 0.5)),
+            ),
+        ),
+    ])
+
+
+def _bayesian_ridge(params: dict[str, Any]) -> Pipeline:
+    return Pipeline([
+        ("scale", MinMaxScaler()),
+        (
+            "model",
+            BayesianRidge(
+                alpha_1=float(params.get("alpha_1", 1e-6)),
+                lambda_1=float(params.get("lambda_1", 1e-6)),
+            ),
+        ),
+    ])
+
+
+def _huber(params: dict[str, Any]) -> Pipeline:
+    return Pipeline([
+        ("scale", MinMaxScaler()),
+        (
+            "model",
+            HuberRegressor(
+                epsilon=float(params.get("epsilon", 1.35)),
+                alpha=float(params.get("alpha", 0.0001)),
+            ),
+        ),
+    ])
+
+
 def _svr_linear(params: dict[str, Any]) -> Pipeline:
     return Pipeline([
         ("scale", MinMaxScaler()),
@@ -120,6 +170,37 @@ def _rf(params: dict[str, Any]) -> Pipeline:
     ])
 
 
+def _extra_trees(params: dict[str, Any]) -> Pipeline:
+    return Pipeline([
+        ("scale", MinMaxScaler()),
+        (
+            "model",
+            ExtraTreesRegressor(
+                n_estimators=int(params.get("n_estimators", 100)),
+                max_depth=int(params.get("max_depth", 4)),
+                min_samples_leaf=int(params.get("min_samples_leaf", 5)),
+                random_state=0,
+            ),
+        ),
+    ])
+
+
+def _gbr(params: dict[str, Any]) -> Pipeline:
+    return Pipeline([
+        ("scale", MinMaxScaler()),
+        (
+            "model",
+            GradientBoostingRegressor(
+                n_estimators=int(params.get("n_estimators", 50)),
+                max_depth=int(params.get("max_depth", 2)),
+                min_samples_leaf=int(params.get("min_samples_leaf", 5)),
+                learning_rate=float(params.get("learning_rate", 0.1)),
+                random_state=0,
+            ),
+        ),
+    ])
+
+
 MODELS: list[ModelSpec] = [
     ModelSpec(
         key="ridge",
@@ -142,6 +223,118 @@ MODELS: list[ModelSpec] = [
             ),
         ],
         build=_ridge,
+    ),
+    ModelSpec(
+        key="lasso",
+        menu_name="lasso",
+        blurb=(
+            "Lasso is also a straight-line model, but it can push some feature weights "
+            "all the way to zero. That means it may ignore measurements that do not help "
+            "much, which can keep things simpler when only a few signals matter."
+        ),
+        hyperparams=[
+            HyperparamSpec(
+                name="alpha",
+                description=(
+                    "How strongly to shrink (and zero out) feature weights. Higher = "
+                    "more features ignored / simpler model; lower = freer fit."
+                ),
+                default=0.1,
+                values=lambda: _linspace_around(0.1, 0.09),
+            ),
+        ],
+        build=_lasso,
+    ),
+    ModelSpec(
+        key="elasticnet",
+        menu_name="elasticnet",
+        blurb=(
+            "Elastic Net mixes Ridge and Lasso: it both shrinks weights and can drop "
+            "weak features. Useful when features are related and you want a middle "
+            "ground between “keep everything a little” and “drop some entirely.”"
+        ),
+        hyperparams=[
+            HyperparamSpec(
+                name="alpha",
+                description=(
+                    "Overall strength of the hold-back. Higher = smoother / more cautious; "
+                    "lower = freer to fit the training strokes."
+                ),
+                default=0.1,
+                values=lambda: _linspace_around(0.1, 0.09),
+            ),
+            HyperparamSpec(
+                name="l1_ratio",
+                description=(
+                    "Mix between Lasso-style dropping (closer to 1) and Ridge-style "
+                    "gentle shrinking (closer to 0)."
+                ),
+                default=0.5,
+                values=lambda: _linspace_around(0.5, 0.4),
+            ),
+        ],
+        build=_elasticnet,
+    ),
+    ModelSpec(
+        key="bayesian_ridge",
+        menu_name="bayesian_ridge",
+        blurb=(
+            "Bayesian Ridge is another straight-line model that chooses how hard to "
+            "hold itself back automatically from the data. The two knobs below gently "
+            "nudge the prior beliefs that guide that automatic choice."
+        ),
+        hyperparams=[
+            HyperparamSpec(
+                name="alpha_1",
+                description=(
+                    "Prior shape for noise precision. Larger tends to assume less noise "
+                    "up front; smaller is more open-minded about noisy grades."
+                ),
+                default=1e-6,
+                values=lambda: np.logspace(-8, -4, N_SWEEP),
+            ),
+            HyperparamSpec(
+                name="lambda_1",
+                description=(
+                    "Prior shape for weight precision. Larger tends toward stronger "
+                    "shrinkage; smaller lets weights roam more freely."
+                ),
+                default=1e-6,
+                values=lambda: np.logspace(-8, -4, N_SWEEP),
+            ),
+        ],
+        build=_bayesian_ridge,
+    ),
+    ModelSpec(
+        key="huber",
+        menu_name="huber",
+        blurb=(
+            "Huber is a straight-line model that stays calm when a few strokes are "
+            "wild outliers. It fits most points carefully, but does not let one bad "
+            "stroke yank the whole line off course."
+        ),
+        hyperparams=[
+            HyperparamSpec(
+                name="epsilon",
+                description=(
+                    "How far off a stroke can be before it is treated as an outlier. "
+                    "Larger = more tolerant; smaller = fussier about large mistakes."
+                ),
+                default=1.35,
+                # sklearn requires epsilon >= 1.0
+                values=lambda: np.linspace(1.0, 2.0, N_SWEEP),
+            ),
+            HyperparamSpec(
+                name="alpha",
+                description=(
+                    "How strongly to hold the line back (L2 regularization). Higher = "
+                    "smoother / more cautious; lower = freer fit."
+                ),
+                default=0.0001,
+                values=lambda: np.logspace(-6, -2, N_SWEEP),
+            ),
+        ],
+        build=_huber,
     ),
     ModelSpec(
         key="svr_linear",
@@ -196,12 +389,33 @@ MODELS: list[ModelSpec] = [
         build=_svr_rbf,
     ),
     ModelSpec(
+        key="knn_3",
+        menu_name="knn_3",
+        blurb=(
+            "k-Nearest Neighbors grades a stroke by looking at the most similar strokes "
+            "it has already seen and averaging their grades. This entry starts with a "
+            "small neighborhood (3) so predictions stay local and sensitive."
+        ),
+        hyperparams=[
+            HyperparamSpec(
+                name="n_neighbors",
+                description=(
+                    "How many similar strokes to average. Smaller = more local / sensitive; "
+                    "larger = smoother average over more neighbors."
+                ),
+                default=3,
+                values=lambda: _int_range_include_center(3, 1, 10),
+            ),
+        ],
+        build=_knn,
+    ),
+    ModelSpec(
         key="knn",
-        menu_name="knn",
+        menu_name="knn_5",
         blurb=(
             "k-Nearest Neighbors grades a stroke by looking at the most similar strokes "
             "it has already seen and averaging their grades. No fancy equation — just "
-            "“what did strokes like this one usually score?”"
+            "“what did strokes like this one usually score?” Default neighborhood is 5."
         ),
         hyperparams=[
             HyperparamSpec(
@@ -255,6 +469,93 @@ MODELS: list[ModelSpec] = [
             ),
         ],
         build=_rf,
+    ),
+    ModelSpec(
+        key="extra_trees",
+        menu_name="extra_trees",
+        blurb=(
+            "Extra Trees is like a random forest, but the trees pick split points more "
+            "randomly. That extra randomness can reduce overfitting and sometimes gives "
+            "a steadier average on small datasets."
+        ),
+        hyperparams=[
+            HyperparamSpec(
+                name="n_estimators",
+                description=(
+                    "How many trees to grow. More trees usually means a steadier average, "
+                    "with diminishing returns as the count gets large."
+                ),
+                default=100,
+                values=lambda: np.arange(20, 220, 20, dtype=int),
+            ),
+            HyperparamSpec(
+                name="max_depth",
+                description=(
+                    "How deep each tree may grow. Deeper = more detailed rules; "
+                    "shallower = simpler, less likely to memorize quirks."
+                ),
+                default=4,
+                values=lambda: _int_range_include_center(4, 1, 10),
+            ),
+            HyperparamSpec(
+                name="min_samples_leaf",
+                description=(
+                    "Smallest group of strokes allowed at the end of a tree branch. "
+                    "Larger = chunkier / safer groups; smaller = finer splits."
+                ),
+                default=5,
+                values=lambda: _int_range_include_center(5, 1, 10),
+            ),
+        ],
+        build=_extra_trees,
+    ),
+    ModelSpec(
+        key="gbr_shallow",
+        menu_name="gbr_shallow",
+        blurb=(
+            "Gradient boosting builds trees one after another, each trying to fix the "
+            "mistakes of the previous ones. Kept shallow here so it does not memorize "
+            "every quirk in a small set of strokes."
+        ),
+        hyperparams=[
+            HyperparamSpec(
+                name="n_estimators",
+                description=(
+                    "How many boosting rounds (trees) to add. More can improve fit, but "
+                    "too many may overfit on a small dataset."
+                ),
+                default=50,
+                values=lambda: np.arange(10, 110, 10, dtype=int),
+            ),
+            HyperparamSpec(
+                name="max_depth",
+                description=(
+                    "How deep each tree may grow. Deeper = more detailed corrections; "
+                    "shallower = safer on small data."
+                ),
+                default=2,
+                values=lambda: _int_range_include_center(2, 1, 5),
+            ),
+            HyperparamSpec(
+                name="min_samples_leaf",
+                description=(
+                    "Smallest group of strokes allowed at the end of a tree branch. "
+                    "Larger = chunkier / safer groups; smaller = finer splits."
+                ),
+                default=5,
+                values=lambda: _int_range_include_center(5, 1, 10),
+            ),
+            HyperparamSpec(
+                name="learning_rate",
+                description=(
+                    "How big a step each new tree takes. Smaller = slower, steadier "
+                    "learning; larger = faster but easier to overshoot."
+                ),
+                default=0.1,
+                values=lambda: _linspace_around(0.1, 0.09),
+            ),
+        ],
+        build=_gbr,
     ),
 ]
 

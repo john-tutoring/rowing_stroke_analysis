@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import numpy as np
 from sklearn.dummy import DummyRegressor
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import Ridge
+from sklearn.ensemble import (
+    ExtraTreesRegressor,
+    GradientBoostingRegressor,
+    RandomForestRegressor,
+)
+from sklearn.linear_model import BayesianRidge, ElasticNet, HuberRegressor, Lasso, Ridge
 from sklearn.model_selection import KFold, cross_validate
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import MinMaxScaler, MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.svm import SVR
 
 import feature_extraction as fe
@@ -20,6 +24,16 @@ FEATURE_EXTRACTORS: list[fe.FeatureExtractor] = list(fe.DEFAULT_FEATURE_EXTRACTO
 MODELS: dict[str, Pipeline] = {
     "dummy_mean": Pipeline([("model", DummyRegressor(strategy="mean"))]),
     "ridge": Pipeline([("scale", MinMaxScaler()), ("model", Ridge(alpha=1.0))]),
+    "lasso": Pipeline([("scale", MinMaxScaler()), ("model", Lasso(alpha=0.1))]),
+    "elasticnet": Pipeline([
+        ("scale", MinMaxScaler()),
+        ("model", ElasticNet(alpha=0.1, l1_ratio=0.5)),
+    ]),
+    "bayesian_ridge": Pipeline([
+        ("scale", MinMaxScaler()),
+        ("model", BayesianRidge()),
+    ]),
+    "huber": Pipeline([("scale", MinMaxScaler()), ("model", HuberRegressor())]),
     "svr_linear": Pipeline([
         ("scale", MinMaxScaler()),
         ("model", SVR(kernel="linear", C=1.0)),
@@ -27,6 +41,10 @@ MODELS: dict[str, Pipeline] = {
     "svr_rbf": Pipeline([
         ("scale", MinMaxScaler()),
         ("model", SVR(kernel="rbf", C=1.0, epsilon=0.1)),
+    ]),
+    "knn_3": Pipeline([
+        ("scale", MinMaxScaler()),
+        ("model", KNeighborsRegressor(n_neighbors=3)),
     ]),
     "knn_5": Pipeline([
         ("scale", MinMaxScaler()),
@@ -39,6 +57,30 @@ MODELS: dict[str, Pipeline] = {
             RandomForestRegressor(
                 n_estimators=100,
                 max_depth=4,
+                min_samples_leaf=5,
+                random_state=0,
+            ),
+        ),
+    ]),
+    "extra_trees": Pipeline([
+        ("scale", MinMaxScaler()),
+        (
+            "model",
+            ExtraTreesRegressor(
+                n_estimators=100,
+                max_depth=4,
+                min_samples_leaf=5,
+                random_state=0,
+            ),
+        ),
+    ]),
+    "gbr_shallow": Pipeline([
+        ("scale", MinMaxScaler()),
+        (
+            "model",
+            GradientBoostingRegressor(
+                n_estimators=50,
+                max_depth=2,
                 min_samples_leaf=5,
                 random_state=0,
             ),
@@ -80,7 +122,7 @@ def print_leaderboard(
     }
 
     print(f"samples={len(y)} features={x.shape[1]} kfold_splits={n_splits}\n")
-    print(f"{'model':<16} {'mae':>8} {'±':>3} {'rmse':>8} {'±':>3} {'r2':>8} {'±':>3}")
+    print(f"{'model':<18} {'mae':>8} {'±':>3} {'rmse':>8} {'±':>3} {'r2':>8} {'±':>3}")
 
     rows: list[tuple[float, str, float, float, float, float, float, float]] = []
     for name, pipe in models.items():
@@ -100,7 +142,7 @@ def print_leaderboard(
     for row in sorted(rows):
         _, name, mae, mae_std, rmse, rmse_std, r2, r2_std = row
         print(
-            f"{name:<16} {mae:8.3f} {mae_std:5.3f} "
+            f"{name:<18} {mae:8.3f} {mae_std:5.3f} "
             f"{rmse:8.3f} {rmse_std:5.3f} {r2:8.3f} {r2_std:5.3f}"
         )
 
