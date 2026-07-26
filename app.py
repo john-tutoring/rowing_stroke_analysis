@@ -21,8 +21,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from sklearn.pipeline import Pipeline
 
 import feature_extraction as fe
-import joint_info
-from extraction import TimingStats, VideoInfo, joints_from_video
+from extraction import TimingStats, joints_from_video
 from split_strokes import split_cycles
 
 APP_DIR = Path(__file__).resolve().parent
@@ -51,28 +50,10 @@ def load_model(path: Path = MODEL_PATH) -> Pipeline:
 model: Pipeline = load_model()
 
 
-def pose_payload(
-    frames: np.ndarray, frame_times: np.ndarray, video_info: VideoInfo
-) -> dict:
-    """Per-frame 2D landmarks for the browser to draw over the played-back video."""
-    # Columns are [video_index, row_grade, x, y, z, ...]; keep x and y per joint.
-    coords = frames[:, 2:].reshape(len(frames), joint_info.NUM_JOINTS, 3)[:, :, :2]
-    return {
-        "fps": round(video_info["fps"], 3),
-        "width": video_info["width"],
-        "height": video_info["height"],
-        "landmarks": joint_info.joints,
-        "t": np.round(frame_times, 3).tolist(),
-        "xy": np.round(coords.reshape(len(frames), -1), 4).tolist(),
-    }
-
-
 def video_to_predictions(video_path: str) -> dict:
     """Pose → strokes → features → predicted grade per stroke."""
     timing: TimingStats = {"cv2": 0.0, "mediapipe": 0.0}
-    frames, frame_times, video_info = joints_from_video(
-        video_path, 0, timing, rowing_grade=0, return_timestamps=True
-    )
+    frames = joints_from_video(video_path, 0, timing, rowing_grade=0)
     if frames.size == 0:
         return {"error": "No pose detected in video."}
 
@@ -106,7 +87,6 @@ def video_to_predictions(video_path: str) -> dict:
         "strokes_detected": len(cycles),
         "predicted_grade_mean": round(float(np.mean(preds)), 2),
         "strokes": strokes,
-        "pose": pose_payload(frames, frame_times, video_info),
     }
 
 
