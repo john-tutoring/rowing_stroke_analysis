@@ -1,2 +1,6 @@
 cycle_data.csv
 *_cycle_split.png
+__pycache__/
+SampleVideos/
+uploads/
+.venv312/
