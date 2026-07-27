@@ -113,7 +113,7 @@ let grades = [];
 let poseCursor = 0;       // monotonic cursor into pose.t
 let poseRaf = 0;
 let objectUrl = null;
-let currentTab = "frames";
+let currentTab = "strokes";
 let chart = null;
 let lastRow = -1;
 // Set only in the no-video fallback, where nothing drives video.currentTime.

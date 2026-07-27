@@ -42,13 +42,13 @@
 
     <section id="analysis">
       <nav class="tabs" role="tablist" id="tabs">
-        <button type="button" data-tab="frames" class="active" role="tab" aria-selected="true">Frame analysis</button>
-        <button type="button" data-tab="strokes" role="tab" aria-selected="false">Stroke analysis</button>
+        <button type="button" data-tab="strokes" class="active" role="tab" aria-selected="true">Stroke analysis</button>
+        <button type="button" data-tab="frames" role="tab" aria-selected="false">Frame analysis</button>
         <button type="button" data-tab="summary" role="tab" aria-selected="false">Session summary</button>
       </nav>
 
       <!-- Tab 1: per-frame datapoints, live readout synced to the video -->
-      <section id="panel-frames" class="panel" role="tabpanel">
+      <section id="panel-frames" class="panel" role="tabpanel" hidden>
         <p class="panel-hint">Play the video — values track the wireframe. Colors match the rings drawn on the joints.</p>
         <div class="tile-grid">
           <div class="readout-tile" style="--dot: var(--c-hip)">
@@ -85,7 +85,7 @@
       </section>
 
       <!-- Tab 2: per-stroke scores from the model -->
-      <section id="panel-strokes" class="panel" role="tabpanel" hidden>
+      <section id="panel-strokes" class="panel" role="tabpanel">
         <p class="panel-hint">Each bar is one stroke, colored by its score. The wireframe takes the color of the stroke being played.</p>
         <div class="chart-wrap">
           <p class="chart-empty" id="chart-empty">Stroke scores appear here after analysis.</p>
