@@ -48,4 +48,8 @@ headers: Final[list[str]] = ["index", "row_grade"] + [
 ]
 HEADER: Final[str] = ",".join(headers)
 
+# Cycle CSVs carry the source video as a trailing column so held-out-by-video CV is possible.
+# It goes last precisely so every COL_LOOKUP offset below stays valid.
+CYCLE_HEADER: Final[str] = HEADER + ",video_index"
+
 COL_LOOKUP: Final[dict[str, int]] = {name: idx for idx, name in enumerate(headers)}

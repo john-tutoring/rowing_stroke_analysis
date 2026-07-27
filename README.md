@@ -44,22 +44,39 @@ python plot_cycle_signals.py path/to/video.mp4
 
 Per-stroke features (see `feature_extraction.py`) currently include:
 
-- `max_hip_angle`, `min_hip_angle`
-- `fastest_hip_accel_timing`, `fastest_hip_velocity_timing`
-- `knee_min_accel_timing`
+- `min_hip_angle` — compression at the catch
+- `fastest_hip_velocity_timing` — when the hip opens fastest
+- `knee_min_accel_timing` — when knee angular acceleration crosses ~zero
+- `body_angle_at_catch` — torso angle at the catch, i.e. forward reach
+- `leg_back_lag` — sequencing: how far the legs peak ahead of the back swing
+- `elbow_angle_range` — how far the arms draw
 
 Timing features are normalized to stroke length (0–1). Angle features stay in degrees. Model pipelines scale columns with `MinMaxScaler` inside each CV fold / fit.
 
+`body_angle_at_catch` is measured against the erg's seat rail — recovered as the principal axis of hip motion — rather than the image axes, so it is unaffected by camera roll. The catch itself is located per stroke as the most compressed frame (`catch_index`).
+
+`max_hip_angle` and `fastest_hip_accel_timing` are still defined but left out of `DEFAULT_FEATURE_EXTRACTORS`: both measured near zero correlation with grade and made held-out error worse.
+
 ## Model comparison
 
-`model_compare.py` loads `cycle_data.csv` and prints shuffled 5-fold CV scores (MAE, RMSE, R²) for:
+`model_compare.py` loads `cycle_data.csv` and prints **two** tables for:
 
 | Family | Models |
 |--------|--------|
 | Baseline | `dummy_mean` |
 | Linear | `ridge`, `lasso`, `elasticnet`, `bayesian_ridge`, `huber` |
-| Kernel / neighbors | `svr_linear`, `svr_rbf`, `knn_3`, `knn_5` |
+| Kernel | `svr_linear`, `svr_rbf` |
 | Trees | `rf_shallow`, `extra_trees`, `gbr_shallow` |
+
+**Table 1 — shuffled 5-fold CV over strokes.** The conventional split, and an optimistic one. A grade belongs to a *video*, and each video contributes 8–28 near-identical strokes, so shuffling puts a rower's other strokes in the training set. A model that recognises the rower scores well without judging the stroke.
+
+**Table 2 — leave-one-video-out.** Each video is held out entirely, which is what the app actually faces: a rower it has never seen. Predictions are pooled across folds before scoring, because every stroke in a held-out video shares one grade and a per-fold R² would be degenerate. `video_mae` compares the mean of a video's stroke predictions to its grade — the same quantity the app reports.
+
+Expect a large gap between the two, and expect the ranking to change: on the current data `gbr_shallow` leads Table 1 at 2.10 MAE but places 7th in Table 2 at 9.22, while `bayesian_ridge` is the honest winner at 8.14 against a `dummy_mean` floor of 15.54. Table 2 is the one to believe.
+
+k-Nearest Neighbors is deliberately excluded for the same reason — it topped Table 1 while being no better than the mean baseline on an unseen rower.
+
+Leave-one-video-out needs to know which video each stroke came from, which is why `cycle_data.csv` carries a trailing `video_index` column. If you see a message about the file predating that column, re-run `python split_strokes.py`.
 
 ```bash
 python model_compare.py

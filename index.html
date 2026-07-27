@@ -4,341 +4,139 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Stroke Score</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚣</text></svg>">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-  <style>
-    :root {
-      --ink: #0c1f2e;
-      --foam: #f3f7f4;
-      --mist: rgba(243, 247, 244, 0.78);
-      --accent: #2a9d8f;
-      --accent-deep: #1d6f66;
-      --warn: #e8c4a8;
-    }
-
-    * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      color: var(--foam);
-      font-family: "Source Sans 3", system-ui, sans-serif;
-      background:
-        radial-gradient(ellipse 90% 60% at 10% 0%, #3d6b7a 0%, transparent 55%),
-        radial-gradient(ellipse 70% 50% at 100% 20%, #1a4a52 0%, transparent 50%),
-        linear-gradient(165deg, #0a1620 0%, #14303c 42%, #1f4d4a 78%, #0f2428 100%);
-      background-attachment: fixed;
-    }
-
-    main {
-      width: min(720px, calc(100% - 2.5rem));
-      margin: 0 auto;
-      padding: 4.5rem 0 5rem;
-    }
-
-    .brand {
-      font-family: Fraunces, Georgia, serif;
-      font-weight: 800;
-      font-size: clamp(2.75rem, 8vw, 4.25rem);
-      line-height: 0.95;
-      letter-spacing: -0.03em;
-      margin: 0 0 0.75rem;
-    }
-
-    .lede {
-      margin: 0 0 2.5rem;
-      max-width: 28rem;
-      font-size: 1.125rem;
-      line-height: 1.45;
-      color: var(--mist);
-    }
-
-    form {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 0.85rem 1rem;
-      margin-bottom: 2.75rem;
-    }
-
-    .file-wrap {
-      position: relative;
-      flex: 1 1 14rem;
-    }
-
-    .file-wrap input[type="file"] {
-      position: absolute;
-      inset: 0;
-      opacity: 0;
-      cursor: pointer;
-      width: 100%;
-      height: 100%;
-    }
-
-    .file-label {
-      display: block;
-      padding: 0.95rem 1.15rem;
-      border: 1.5px solid rgba(243, 247, 244, 0.35);
-      border-radius: 4px;
-      background: rgba(12, 31, 46, 0.35);
-      color: var(--foam);
-      font-size: 0.95rem;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      transition: border-color 0.2s, background 0.2s;
-    }
-
-    .file-wrap:hover .file-label,
-    .file-wrap:focus-within .file-label {
-      border-color: var(--accent);
-      background: rgba(12, 31, 46, 0.55);
-    }
-
-    button[type="submit"] {
-      font-family: Fraunces, Georgia, serif;
-      font-weight: 700;
-      font-size: 1.15rem;
-      padding: 0.95rem 1.6rem;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      color: var(--ink);
-      background: linear-gradient(180deg, #5ec4b6 0%, var(--accent) 55%, var(--accent-deep) 100%);
-      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset;
-      transition: transform 0.15s ease, filter 0.15s ease;
-    }
-
-    button[type="submit"]:hover:not(:disabled) {
-      transform: translateY(-1px);
-      filter: brightness(1.06);
-    }
-
-    button[type="submit"]:active:not(:disabled) {
-      transform: translateY(1px);
-    }
-
-    button[type="submit"]:disabled {
-      opacity: 0.55;
-      cursor: wait;
-    }
-
-    .status {
-      min-height: 1.4rem;
-      margin: -1.5rem 0 1.75rem;
-      color: var(--mist);
-      font-size: 0.95rem;
-    }
-
-    .status.error { color: var(--warn); }
-
-    .results {
-      display: none;
-      animation: rise 0.45s ease both;
-    }
-
-    .results.visible { display: block; }
-
-    @keyframes rise {
-      from { opacity: 0; transform: translateY(12px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .score-block {
-      margin-bottom: 2rem;
-    }
-
-    .score-label {
-      font-family: Fraunces, Georgia, serif;
-      font-weight: 500;
-      font-size: 1.05rem;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: var(--mist);
-      margin: 0 0 0.35rem;
-    }
-
-    .score-value {
-      font-family: Fraunces, Georgia, serif;
-      font-weight: 800;
-      font-size: clamp(4.5rem, 16vw, 7rem);
-      line-height: 0.9;
-      letter-spacing: -0.04em;
-      margin: 0;
-      background: linear-gradient(180deg, #fff 10%, #9fd8cf 100%);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-    }
-
-    .score-meta {
-      margin: 0.65rem 0 0;
-      color: var(--mist);
-      font-size: 0.95rem;
-    }
-
-    .chart-wrap {
-      position: relative;
-      height: 280px;
-      padding-top: 0.25rem;
-    }
-
-    .chart-title {
-      font-family: Fraunces, Georgia, serif;
-      font-weight: 700;
-      font-size: 1.35rem;
-      margin: 0 0 1rem;
-    }
-  </style>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
 </head>
 <body>
   <main>
-    <h1 class="brand">Stroke Score</h1>
-    <p class="lede">Upload a short rowing video. We’ll estimate stroke quality and chart how it holds across the piece.</p>
+    <header class="app-header">
+      <h1 class="brand">STROKE<span class="brand-accent">SCORE</span></h1>
+      <p class="lede">Upload a side-view rowing video for a frame-by-frame form breakdown and a score per stroke.</p>
+    </header>
 
     <form id="form">
       <div class="file-wrap">
         <div class="file-label" id="file-label">Choose a video…</div>
         <input type="file" id="video" name="video" accept="video/*" required>
       </div>
-      <button type="submit" id="submit">Score video</button>
+      <button type="submit" id="submit">Analyze</button>
     </form>
 
     <p class="status" id="status" aria-live="polite"></p>
 
-    <section class="results" id="results" aria-live="polite">
-      <div class="score-block">
-        <p class="score-label">Average score</p>
-        <p class="score-value" id="avg-score">—</p>
-        <p class="score-meta" id="score-meta"></p>
+    <section class="video-panel" id="video-panel">
+      <div class="pose-wrap" id="pose-wrap">
+        <video id="pose-video" playsinline controls muted preload="metadata"></video>
+        <canvas id="pose-canvas"></canvas>
+        <div class="stroke-badge" id="stroke-badge" hidden></div>
       </div>
-      <h2 class="chart-title">Quality by stroke</h2>
-      <div class="chart-wrap">
-        <canvas id="stroke-chart"></canvas>
-      </div>
+      <p class="pose-note" id="pose-note"></p>
+    </section>
+
+    <section id="analysis" hidden>
+      <nav class="tabs" role="tablist" id="tabs">
+        <button type="button" data-tab="frames" class="active" role="tab" aria-selected="true">Frame analysis</button>
+        <button type="button" data-tab="strokes" role="tab" aria-selected="false">Stroke analysis</button>
+        <button type="button" data-tab="summary" role="tab" aria-selected="false">Session summary</button>
+      </nav>
+
+      <!-- Tab 1: per-frame datapoints, live readout synced to the video -->
+      <section id="panel-frames" class="panel" role="tabpanel">
+        <p class="panel-hint">Play the video — values track the wireframe. Colors match the rings drawn on the joints.</p>
+        <div class="tile-grid">
+          <div class="readout-tile" style="--dot: var(--c-hip)">
+            <span class="tile-dot"></span>
+            <span class="tile-label">Hip angle</span>
+            <span class="tile-value" id="val-hip">—</span>
+          </div>
+          <div class="readout-tile" style="--dot: var(--c-knee)">
+            <span class="tile-dot"></span>
+            <span class="tile-label">Knee angle</span>
+            <span class="tile-value" id="val-knee">—</span>
+          </div>
+          <div class="readout-tile" style="--dot: var(--c-elbow)">
+            <span class="tile-dot"></span>
+            <span class="tile-label">Elbow angle</span>
+            <span class="tile-value" id="val-elbow">—</span>
+          </div>
+          <div class="readout-tile" style="--dot: var(--c-wrist)">
+            <span class="tile-dot"></span>
+            <span class="tile-label">Wrist position</span>
+            <span class="tile-value" id="val-wrist">—</span>
+          </div>
+          <div class="readout-tile" style="--dot: var(--c-vel)">
+            <span class="tile-dot"></span>
+            <span class="tile-label">Velocity</span>
+            <span class="tile-value" id="val-vel">—</span>
+          </div>
+          <div class="readout-tile" style="--dot: var(--c-acc)">
+            <span class="tile-dot"></span>
+            <span class="tile-label">Acceleration</span>
+            <span class="tile-value" id="val-acc">—</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab 2: per-stroke scores from the model -->
+      <section id="panel-strokes" class="panel" role="tabpanel" hidden>
+        <p class="panel-hint">Each bar is one stroke, colored by its score. The wireframe takes the color of the stroke being played.</p>
+        <div class="chart-wrap">
+          <canvas id="stroke-chart"></canvas>
+        </div>
+        <fieldset class="feature-radios" id="feature-radios">
+          <legend>Overlay a model feature</legend>
+          <label><input type="radio" name="feature" value="" checked> None</label>
+          <label><input type="radio" name="feature" value="min_hip_angle"> Min hip angle</label>
+          <label><input type="radio" name="feature" value="fastest_hip_velocity_timing"> Hip velocity timing</label>
+          <label><input type="radio" name="feature" value="knee_min_accel_timing"> Knee accel timing</label>
+          <label><input type="radio" name="feature" value="body_angle_at_catch"> Body angle at catch</label>
+          <label><input type="radio" name="feature" value="leg_back_lag"> Leg–back lag</label>
+          <label><input type="radio" name="feature" value="elbow_angle_range"> Elbow angle range</label>
+        </fieldset>
+        <div class="avg-block">
+          <span class="avg-label">Average score</span>
+          <span class="avg-value" id="avg-value">—</span>
+        </div>
+      </section>
+
+      <!-- Tab 3: whole-session stats -->
+      <section id="panel-summary" class="panel" role="tabpanel" hidden>
+        <div class="tile-grid stat-grid">
+          <div class="stat-tile">
+            <span class="tile-label">Strokes</span>
+            <span class="stat-value" id="sum-strokes">—</span>
+            <span class="stat-sub" id="sum-strokes-sub"></span>
+          </div>
+          <div class="stat-tile">
+            <span class="tile-label">Stroke rate</span>
+            <span class="stat-value" id="sum-rate">—</span>
+            <span class="stat-sub">strokes / min</span>
+          </div>
+          <div class="stat-tile">
+            <span class="tile-label">Average score</span>
+            <span class="stat-value" id="sum-avg">—</span>
+            <span class="stat-sub">out of 100</span>
+          </div>
+          <div class="stat-tile">
+            <span class="tile-label">Best stroke</span>
+            <span class="stat-value" id="sum-best">—</span>
+            <span class="stat-sub" id="sum-best-sub"></span>
+          </div>
+          <div class="stat-tile">
+            <span class="tile-label">Worst stroke</span>
+            <span class="stat-value" id="sum-worst">—</span>
+            <span class="stat-sub" id="sum-worst-sub"></span>
+          </div>
+          <div class="stat-tile">
+            <span class="tile-label">Consistency</span>
+            <span class="stat-value" id="sum-consistency">—</span>
+            <span class="stat-sub" id="sum-consistency-sub"></span>
+          </div>
+        </div>
+      </section>
     </section>
   </main>
-
-  <script>
-    const form = document.getElementById("form");
-    const statusEl = document.getElementById("status");
-    const results = document.getElementById("results");
-    const avgScore = document.getElementById("avg-score");
-    const scoreMeta = document.getElementById("score-meta");
-    const fileInput = document.getElementById("video");
-    const fileLabel = document.getElementById("file-label");
-    const submitBtn = document.getElementById("submit");
-    let chart;
-
-    fileInput.addEventListener("change", () => {
-      fileLabel.textContent = fileInput.files[0]?.name || "Choose a video…";
-    });
-
-    function showError(msg) {
-      statusEl.textContent = msg;
-      statusEl.classList.add("error");
-      results.classList.remove("visible");
-    }
-
-    function renderResults(data) {
-      const strokes = data.strokes || [];
-      const grades = strokes.map((s) => s.predicted_grade);
-      const labels = strokes.map((s) => String(s.stroke));
-
-      avgScore.textContent = Number(data.predicted_grade_mean).toFixed(1);
-      scoreMeta.textContent = `${data.strokes_detected} stroke${data.strokes_detected === 1 ? "" : "s"} detected`;
-      results.classList.add("visible");
-
-      if (chart) chart.destroy();
-      const ctx = document.getElementById("stroke-chart").getContext("2d");
-      chart = new Chart(ctx, {
-        type: "line",
-        data: {
-          labels,
-          datasets: [{
-            label: "Stroke quality",
-            data: grades,
-            borderColor: "#5ec4b6",
-            backgroundColor: "rgba(94, 196, 182, 0.18)",
-            borderWidth: 3,
-            pointRadius: 5,
-            pointHoverRadius: 7,
-            pointBackgroundColor: "#f3f7f4",
-            pointBorderColor: "#2a9d8f",
-            pointBorderWidth: 2,
-            fill: true,
-            tension: 0.25,
-          }],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                title: (items) => `Stroke ${items[0].label}`,
-                label: (item) => `Score: ${item.formattedValue}`,
-              },
-            },
-          },
-          scales: {
-            x: {
-              title: {
-                display: true,
-                text: "Stroke",
-                color: "rgba(243, 247, 244, 0.7)",
-                font: { family: "Fraunces", size: 14, weight: "700" },
-              },
-              ticks: { color: "rgba(243, 247, 244, 0.75)" },
-              grid: { color: "rgba(243, 247, 244, 0.08)" },
-            },
-            y: {
-              title: {
-                display: true,
-                text: "Quality score",
-                color: "rgba(243, 247, 244, 0.7)",
-                font: { family: "Fraunces", size: 14, weight: "700" },
-              },
-              ticks: { color: "rgba(243, 247, 244, 0.75)" },
-              grid: { color: "rgba(243, 247, 244, 0.08)" },
-            },
-          },
-        },
-      });
-    }
-
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const file = fileInput.files[0];
-      if (!file) return;
-
-      statusEl.classList.remove("error");
-      statusEl.textContent = "Uploading and scoring… this can take a minute.";
-      results.classList.remove("visible");
-      submitBtn.disabled = true;
-
-      const body = new FormData();
-      body.append("video", file);
-
-      try {
-        const res = await fetch("/predict", { method: "POST", body });
-        const data = await res.json();
-        if (!res.ok || data.error) {
-          showError(data.error || "Scoring failed.");
-          return;
-        }
-        statusEl.textContent = "";
-        renderResults(data);
-      } catch (err) {
-        showError("Request failed. Is the server running?");
-        console.error(err);
-      } finally {
-        submitBtn.disabled = false;
-      }
-    });
-  </script>
 </body>
 </html>

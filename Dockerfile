@@ -18,6 +18,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY joint_info.py extraction.py split_strokes.py feature_extraction.py app.py index.html ./
+COPY static ./static
 COPY pose_landmarker_lite.task ./
 RUN mkdir -p artifacts
 COPY artifacts/model.joblib artifacts/model_meta.json ./artifacts/

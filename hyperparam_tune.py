@@ -13,7 +13,6 @@ from sklearn.ensemble import (
 )
 from sklearn.linear_model import BayesianRidge, ElasticNet, HuberRegressor, Lasso, Ridge
 from sklearn.model_selection import KFold, cross_validate
-from sklearn.neighbors import KNeighborsRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.svm import SVR
@@ -145,13 +144,6 @@ def _svr_rbf(params: dict[str, Any]) -> Pipeline:
                 epsilon=float(params.get("epsilon", 0.1)),
             ),
         ),
-    ])
-
-
-def _knn(params: dict[str, Any]) -> Pipeline:
-    return Pipeline([
-        ("scale", MinMaxScaler()),
-        ("model", KNeighborsRegressor(n_neighbors=int(params.get("n_neighbors", 5)))),
     ])
 
 
@@ -387,48 +379,6 @@ MODELS: list[ModelSpec] = [
             ),
         ],
         build=_svr_rbf,
-    ),
-    ModelSpec(
-        key="knn_3",
-        menu_name="knn_3",
-        blurb=(
-            "k-Nearest Neighbors grades a stroke by looking at the most similar strokes "
-            "it has already seen and averaging their grades. This entry starts with a "
-            "small neighborhood (3) so predictions stay local and sensitive."
-        ),
-        hyperparams=[
-            HyperparamSpec(
-                name="n_neighbors",
-                description=(
-                    "How many similar strokes to average. Smaller = more local / sensitive; "
-                    "larger = smoother average over more neighbors."
-                ),
-                default=3,
-                values=lambda: _int_range_include_center(3, 1, 10),
-            ),
-        ],
-        build=_knn,
-    ),
-    ModelSpec(
-        key="knn",
-        menu_name="knn_5",
-        blurb=(
-            "k-Nearest Neighbors grades a stroke by looking at the most similar strokes "
-            "it has already seen and averaging their grades. No fancy equation — just "
-            "“what did strokes like this one usually score?” Default neighborhood is 5."
-        ),
-        hyperparams=[
-            HyperparamSpec(
-                name="n_neighbors",
-                description=(
-                    "How many similar strokes to average. Smaller = more local / sensitive; "
-                    "larger = smoother average over more neighbors."
-                ),
-                default=5,
-                values=lambda: _int_range_include_center(5, 1, 10),
-            ),
-        ],
-        build=_knn,
     ),
     ModelSpec(
         key="rf_shallow",

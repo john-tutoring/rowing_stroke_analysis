@@ -19,6 +19,7 @@ MODEL_PATH: Path = Path(__file__).resolve().parent / "pose_landmarker_lite.task"
 VIDEO_DIRECTORY: str = "./SampleVideos"
 FRAME_MODULUS: int = 2
 RESIZE_TARGET: int = 256
+SMOOTH_WINDOW: int = 5
 
 
 class TimingStats(TypedDict):
@@ -26,6 +27,14 @@ class TimingStats(TypedDict):
 
     cv2: float
     mediapipe: float
+
+
+class VideoInfo(TypedDict):
+    """Source video geometry, for callers that draw on top of the footage."""
+
+    fps: float
+    width: int
+    height: int
 
 
 def get_movie_files(directory: str) -> list[str]:
@@ -43,12 +52,19 @@ def joints_from_video(
     video_index: int,
     times: TimingStats,
     rowing_grade: int | None = None,
-) -> np.ndarray:
+    return_timestamps: bool = False,
+) -> np.ndarray | tuple[np.ndarray, np.ndarray, VideoInfo]:
     """
     Read ``filename``, run pose on every ``FRAME_MODULUS``-th frame, return smoothed landmarks.
 
     Each row is ``[video_index, rowing_grade, x, y, z, ...]`` for 33 joints.
     ``rowing_grade`` comes from the argument, or digits before the extension in ``filename``.
+
+    With ``return_timestamps``, also returns the capture time (seconds) of every
+    returned row plus the source video geometry. Times are collected per *kept*
+    frame and smoothed with the same window as the landmarks, so they stay
+    aligned even though frames are sampled, dropped when no pose is found, and
+    averaged.
     """
     if not MODEL_PATH.is_file():
         raise FileNotFoundError(f"Pose model not found: {MODEL_PATH}")
@@ -68,7 +84,14 @@ def joints_from_video(
 
     frame_reader = cv2.VideoCapture(filename)
     fps = frame_reader.get(cv2.CAP_PROP_FPS) or 30.0
+    width = frame_reader.get(cv2.CAP_PROP_FRAME_WIDTH)
+    height = frame_reader.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    # MediaPipe normalizes x by width and y by height, which distorts every angle on a
+    # non-square frame. Put y in x's units so angles are true; z already shares x's scale.
+    y_scale = height / width if width else 1.0
+    video_info: VideoInfo = {"fps": float(fps), "width": int(width), "height": int(height)}
     all_landmarks: list[list[float]] = []
+    frame_times: list[float] = []
     frame_index = 0
 
     try:
@@ -95,14 +118,18 @@ def joints_from_video(
             if result.pose_landmarks:
                 frame_landmarks: list[float] = [float(video_index), float(rowing_grade)]
                 for lm in result.pose_landmarks[0]:
-                    frame_landmarks.extend((lm.x, lm.y, lm.z))
+                    frame_landmarks.extend((lm.x, lm.y * y_scale, lm.z))
                 all_landmarks.append(frame_landmarks)
+                frame_times.append(timestamp_ms / 1000.0)
     finally:
         frame_reader.release()
         landmarker.close()
 
     landmark_array = np.array(all_landmarks, dtype=np.float64)
-    return smooth_data(landmark_array)
+    smoothed = smooth_data(landmark_array)
+    if not return_timestamps:
+        return smoothed
+    return smoothed, smooth_timestamps(frame_times), video_info
 
 
 def joints_from_videos(files: list[str], times: TimingStats | None) -> np.ndarray:
@@ -123,13 +150,21 @@ def joints_from_videos(files: list[str], times: TimingStats | None) -> np.ndarra
     return frame_data
 
 
-def smooth_data(frame_data: np.ndarray, window: int = 5) -> np.ndarray:
+def smooth_data(frame_data: np.ndarray, window: int = SMOOTH_WINDOW) -> np.ndarray:
     """Apply a moving average along the time axis for each column."""
     smoothed = np.vstack([
         np.convolve(frame_data[:, j], np.ones(window) / window, mode="valid")
         for j in range(frame_data.shape[1])
     ]).T
     return smoothed
+
+
+def smooth_timestamps(frame_times: list[float], window: int = SMOOTH_WINDOW) -> np.ndarray:
+    """Average capture times over the same window ``smooth_data`` uses."""
+    times = np.asarray(frame_times, dtype=np.float64)
+    if times.size < window:
+        return times
+    return np.convolve(times, np.ones(window) / window, mode="valid")
 
 
 def write_to_file(frame_data: np.ndarray, filename: str = "all_videos_all_joints.csv") -> None:

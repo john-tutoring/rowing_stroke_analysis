@@ -14,7 +14,7 @@ import numpy as np
 from scipy.signal import find_peaks
 
 from extraction import TimingStats, joints_from_video
-from split_strokes import x_dif_between_points
+from split_strokes import right_side_closer, x_dif_between_points
 
 # Must match split_strokes.split_cycles
 PEAK_DISTANCE = 10
@@ -28,8 +28,13 @@ def default_plot_path(video_path: Path) -> Path:
     return video_path.with_name(f"{video_path.stem}{PLOT_SUFFIX}")
 
 
-def split_signal_from_video(video_path: str) -> np.ndarray:
-    """Extract pose landmarks and return the wrist–ankle X difference per frame."""
+def split_signal_from_video(video_path: str) -> tuple[np.ndarray, bool]:
+    """
+    Extract pose landmarks and return the wrist–ankle X difference per frame.
+
+    Also returns whether the right side was the one nearer the camera, so the caller can
+    label the plot with the side ``split_cycles`` would actually have used.
+    """
     timing: TimingStats = {"cv2": 0.0, "mediapipe": 0.0}
     frames = joints_from_video(video_path, 0, timing, rowing_grade=0)
     if frames.size == 0:
@@ -37,7 +42,8 @@ def split_signal_from_video(video_path: str) -> np.ndarray:
 
     # Drop video index; keep grade + joints (same layout as split_strokes input)
     arr = frames[:, 1:]
-    return x_dif_between_points(arr, "wrist", "ankle")
+    right_hand = right_side_closer(arr)
+    return x_dif_between_points(arr, "wrist", "ankle", right_hand), right_hand
 
 
 def cycle_split_peaks(signal: np.ndarray) -> np.ndarray:
@@ -52,12 +58,14 @@ def plot_split_signal(
     *,
     title: str,
     output_path: Path,
+    right_hand: bool,
 ) -> None:
     """Line plot of the split metric with x markers at cycle boundaries."""
     frames = np.arange(len(signal))
+    side = "R" if right_hand else "L"
 
     fig, ax = plt.subplots(figsize=(11, 4))
-    ax.plot(frames, signal, color="#1f77b4", linewidth=1.5, label="R wrist X − R ankle X")
+    ax.plot(frames, signal, color="#1f77b4", linewidth=1.5, label=f"{side} wrist X − {side} ankle X")
     ax.plot(
         peaks,
         signal[peaks],
@@ -102,7 +110,7 @@ def main(argv: list[str] | None = None) -> None:
         else default_plot_path(video_path)
     )
 
-    signal = split_signal_from_video(str(video_path))
+    signal, right_hand = split_signal_from_video(str(video_path))
     peaks = cycle_split_peaks(signal)
     if len(peaks) < 2:
         print(
@@ -110,7 +118,13 @@ def main(argv: list[str] | None = None) -> None:
             file=sys.stderr,
         )
 
-    plot_split_signal(signal, peaks, title=video_path.name, output_path=output_path)
+    plot_split_signal(
+        signal,
+        peaks,
+        title=video_path.name,
+        output_path=output_path,
+        right_hand=right_hand,
+    )
     print(output_path)
 
 

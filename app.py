@@ -21,8 +21,9 @@ from flask import Flask, jsonify, request, send_from_directory
 from sklearn.pipeline import Pipeline
 
 import feature_extraction as fe
-from extraction import TimingStats, joints_from_video
-from split_strokes import split_cycles
+import joint_info
+from extraction import TimingStats, VideoInfo, joints_from_video
+from split_strokes import right_side_closer, split_cycles_with_ranges, x_dif_between_points
 
 APP_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = APP_DIR / "uploads"
@@ -50,16 +51,57 @@ def load_model(path: Path = MODEL_PATH) -> Pipeline:
 model: Pipeline = load_model()
 
 
+def pose_payload(frames: np.ndarray, t: np.ndarray, video_info: VideoInfo) -> dict:
+    """Per-row joint XY plus timestamps, ready for the browser canvas overlay."""
+    coords = frames[:, 2:].reshape(len(frames), joint_info.NUM_JOINTS, 3)[:, :, :2].copy()
+    # Extraction stores y in x's units (y * height/width) so angles are true; the canvas
+    # multiplies by element width/height instead, so convert y back to [0, 1] here.
+    if video_info["height"]:
+        coords[:, :, 1] *= video_info["width"] / video_info["height"]
+    return {
+        "fps": video_info["fps"],
+        "width": video_info["width"],
+        "height": video_info["height"],
+        "landmarks": joint_info.joints,
+        "t": np.round(t, 3).tolist(),
+        "xy": np.round(coords.reshape(len(frames), -1), 4).tolist(),
+    }
+
+
+def frame_metrics(arr: np.ndarray, t: np.ndarray, near: bool) -> dict:
+    """Per-frame datapoints for the live readout: angles plus wrist travel/velocity/accel."""
+    wrist_x = x_dif_between_points(arr, "wrist", "ankle", right_hand=near)
+    wrist_v = np.gradient(wrist_x, t)
+    return {
+        "hip_angle": np.round(
+            fe.get_angle_vector(arr, "knee", "hip", "shoulder", right_hand=near), 1
+        ).tolist(),
+        "knee_angle": np.round(
+            fe.get_angle_vector(arr, "ankle", "knee", "hip", right_hand=near), 1
+        ).tolist(),
+        "elbow_angle": np.round(
+            fe.get_angle_vector(arr, "wrist", "elbow", "shoulder", right_hand=near), 1
+        ).tolist(),
+        "wrist_x": np.round(wrist_x, 4).tolist(),
+        "wrist_v": np.round(wrist_v, 3).tolist(),
+        "wrist_a": np.round(np.gradient(wrist_v, t), 2).tolist(),
+    }
+
+
 def video_to_predictions(video_path: str) -> dict:
     """Pose → strokes → features → predicted grade per stroke."""
     timing: TimingStats = {"cv2": 0.0, "mediapipe": 0.0}
-    frames = joints_from_video(video_path, 0, timing, rowing_grade=0)
+    frames, t, video_info = joints_from_video(
+        video_path, 0, timing, rowing_grade=0, return_timestamps=True
+    )
     if frames.size == 0:
         return {"error": "No pose detected in video."}
 
     # Drop video index column; keep placeholder grade + joints (split code expects this layout)
-    per_video = [frames[:, 1:]]
-    cycles = split_cycles(per_video)
+    arr = frames[:, 1:]
+    near = right_side_closer(arr)
+    near_side = "right" if near else "left"
+    cycles, stroke_ranges = split_cycles_with_ranges(arr)
     if not cycles:
         return {"error": "No rowing strokes detected."}
 
@@ -85,8 +127,12 @@ def video_to_predictions(video_path: str) -> dict:
 
     return {
         "strokes_detected": len(cycles),
+        "near_side": near_side,
         "predicted_grade_mean": round(float(np.mean(preds)), 2),
         "strokes": strokes,
+        "stroke_ranges": stroke_ranges,
+        "pose": pose_payload(frames, t, video_info),
+        "metrics": frame_metrics(arr, t, near),
     }
 
 

@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stroke Score</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --ink: #0c1f2e;
+      --foam: #f3f7f4;
+      --mist: rgba(243, 247, 244, 0.78);
+      --accent: #2a9d8f;
+      --accent-deep: #1d6f66;
+      --warn: #e8c4a8;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--foam);
+      font-family: "Source Sans 3", system-ui, sans-serif;
+      background:
+        radial-gradient(ellipse 90% 60% at 10% 0%, #3d6b7a 0%, transparent 55%),
+        radial-gradient(ellipse 70% 50% at 100% 20%, #1a4a52 0%, transparent 50%),
+        linear-gradient(165deg, #0a1620 0%, #14303c 42%, #1f4d4a 78%, #0f2428 100%);
+      background-attachment: fixed;
+    }
+
+    main {
+      width: min(720px, calc(100% - 2.5rem));
+      margin: 0 auto;
+      padding: 4.5rem 0 5rem;
+    }
+
+    .brand {
+      font-family: Fraunces, Georgia, serif;
+      font-weight: 800;
+      font-size: clamp(2.75rem, 8vw, 4.25rem);
+      line-height: 0.95;
+      letter-spacing: -0.03em;
+      margin: 0 0 0.75rem;
+    }
+
+    .lede {
+      margin: 0 0 2.5rem;
+      max-width: 28rem;
+      font-size: 1.125rem;
+      line-height: 1.45;
+      color: var(--mist);
+    }
+
+    form {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.85rem 1rem;
+      margin-bottom: 2.75rem;
+    }
+
+    .file-wrap {
+      position: relative;
+      flex: 1 1 14rem;
+    }
+
+    .file-wrap input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .file-label {
+      display: block;
+      padding: 0.95rem 1.15rem;
+      border: 1.5px solid rgba(243, 247, 244, 0.35);
+      border-radius: 4px;
+      background: rgba(12, 31, 46, 0.35);
+      color: var(--foam);
+      font-size: 0.95rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .file-wrap:hover .file-label,
+    .file-wrap:focus-within .file-label {
+      border-color: var(--accent);
+      background: rgba(12, 31, 46, 0.55);
+    }
+
+    button[type="submit"] {
+      font-family: Fraunces, Georgia, serif;
+      font-weight: 700;
+      font-size: 1.15rem;
+      padding: 0.95rem 1.6rem;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      color: var(--ink);
+      background: linear-gradient(180deg, #5ec4b6 0%, var(--accent) 55%, var(--accent-deep) 100%);
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset;
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+
+    button[type="submit"]:hover:not(:disabled) {
+      transform: translateY(-1px);
+      filter: brightness(1.06);
+    }
+
+    button[type="submit"]:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    button[type="submit"]:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+
+    .status {
+      min-height: 1.4rem;
+      margin: -1.5rem 0 1.75rem;
+      color: var(--mist);
+      font-size: 0.95rem;
+    }
+
+    .status.error { color: var(--warn); }
+
+    .results {
+      display: none;
+      animation: rise 0.45s ease both;
+    }
+
+    .results.visible { display: block; }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .pose-panel {
+      display: none;
+      animation: rise 0.45s ease both;
+    }
+
+    .pose-panel.visible { display: block; }
+
+    /* Video sits at its natural aspect with width:100%, so the element box and
+       the video content box match exactly — no object-fit letterboxing to
+       correct for, and normalized landmarks map onto the canvas with a plain
+       multiply. */
+    .pose-wrap {
+      position: relative;
+      margin-bottom: 2.25rem;
+      border-radius: 6px;
+      overflow: hidden;
+      background: rgba(10, 22, 32, 0.6);
+      line-height: 0;
+    }
+
+    .pose-wrap video {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .pose-wrap.no-video video { display: none; }
+
+    .pose-wrap.no-video {
+      aspect-ratio: var(--pose-aspect, 16 / 9);
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 0%, rgba(42, 157, 143, 0.16) 0%, transparent 60%),
+        rgba(10, 22, 32, 0.85);
+    }
+
+    #pose-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .pose-note {
+      margin: -1.6rem 0 2rem;
+      color: var(--mist);
+      font-size: 0.85rem;
+      line-height: 1.4;
+    }
+
+    .pose-note:empty { display: none; }
+
+    .score-block {
+      margin-bottom: 2rem;
+    }
+
+    .score-label {
+      font-family: Fraunces, Georgia, serif;
+      font-weight: 500;
+      font-size: 1.05rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--mist);
+      margin: 0 0 0.35rem;
+    }
+
+    .score-value {
+      font-family: Fraunces, Georgia, serif;
+      font-weight: 800;
+      font-size: clamp(4.5rem, 16vw, 7rem);
+      line-height: 0.9;
+      letter-spacing: -0.04em;
+      margin: 0;
+      background: linear-gradient(180deg, #fff 10%, #9fd8cf 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .score-meta {
+      margin: 0.65rem 0 0;
+      color: var(--mist);
+      font-size: 0.95rem;
+    }
+
+    .chart-wrap {
+      position: relative;
+      height: 280px;
+      padding-top: 0.25rem;
+    }
+
+    .chart-title {
+      font-family: Fraunces, Georgia, serif;
+      font-weight: 700;
+      font-size: 1.35rem;
+      margin: 0 0 1rem;
+    }
+
+    .features {
+      margin-top: 2.25rem;
+    }
+
+    .features-hint {
+      margin: -0.6rem 0 1rem;
+      color: var(--mist);
+      font-size: 0.9rem;
+    }
+
+    .features dl {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.55rem 1rem;
+      margin: 0;
+      padding: 1.15rem 1.3rem;
+      border: 1px solid rgba(243, 247, 244, 0.14);
+      border-radius: 6px;
+      background: rgba(12, 31, 46, 0.35);
+    }
+
+    .features dt {
+      color: var(--mist);
+      font-size: 0.95rem;
+    }
+
+    .features dd {
+      margin: 0;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1 class="brand">Stroke Score</h1>
+    <p class="lede">Upload a short rowing video. We’ll estimate stroke quality and chart how it holds across the piece.</p>
+
+    <form id="form">
+      <div class="file-wrap">
+        <div class="file-label" id="file-label">Choose a video…</div>
+        <input type="file" id="video" name="video" accept="video/*" required>
+      </div>
+      <button type="submit" id="submit">Score video</button>
+    </form>
+
+    <p class="status" id="status" aria-live="polite"></p>
+
+    <section class="pose-panel" id="pose-panel">
+      <div class="pose-wrap" id="pose-wrap">
+        <video id="pose-video" playsinline controls muted preload="metadata"></video>
+        <canvas id="pose-canvas"></canvas>
+      </div>
+      <p class="pose-note" id="pose-note"></p>
+    </section>
+
+    <section class="results" id="results" aria-live="polite">
+      <div class="score-block">
+        <p class="score-label">Average score</p>
+        <p class="score-value" id="avg-score">—</p>
+        <p class="score-meta" id="score-meta"></p>
+      </div>
+      <h2 class="chart-title">Quality by stroke</h2>
+      <div class="chart-wrap">
+        <canvas id="stroke-chart"></canvas>
+      </div>
+
+      <div class="features" id="features">
+        <h2 class="chart-title" id="features-title">Stroke detail</h2>
+        <p class="features-hint">Tap a point on the chart to inspect that stroke.</p>
+        <dl id="features-list"></dl>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById("form");
+    const statusEl = document.getElementById("status");
+    const results = document.getElementById("results");
+    const avgScore = document.getElementById("avg-score");
+    const scoreMeta = document.getElementById("score-meta");
+    const fileInput = document.getElementById("video");
+    const fileLabel = document.getElementById("file-label");
+    const submitBtn = document.getElementById("submit");
+    const posePanel = document.getElementById("pose-panel");
+    const poseWrap = document.getElementById("pose-wrap");
+    const poseVideo = document.getElementById("pose-video");
+    const poseCanvas = document.getElementById("pose-canvas");
+    const poseNote = document.getElementById("pose-note");
+    const featuresBox = document.getElementById("features");
+    const featuresTitle = document.getElementById("features-title");
+    const featuresList = document.getElementById("features-list");
+    let chart;
+
+    /* ---------- wireframe overlay ---------- */
+
+    // Joint pairs to connect, by MediaPipe landmark name. The 10 face landmarks
+    // are skipped; the nose is drawn as a dot for the head.
+    const POSE_EDGES = [
+      ["left_shoulder", "right_shoulder"],
+      ["left_hip", "right_hip"],
+      ["left_shoulder", "left_hip"],
+      ["right_shoulder", "right_hip"],
+      ["left_shoulder", "left_elbow"],
+      ["left_elbow", "left_wrist"],
+      ["right_shoulder", "right_elbow"],
+      ["right_elbow", "right_wrist"],
+      ["left_hip", "left_knee"],
+      ["left_knee", "left_ankle"],
+      ["left_ankle", "left_heel"],
+      ["left_heel", "left_foot_index"],
+      ["right_hip", "right_knee"],
+      ["right_knee", "right_ankle"],
+      ["right_ankle", "right_heel"],
+      ["right_heel", "right_foot_index"],
+    ];
+
+    // Skip drawing rather than freeze on a stale pose when playback sits in a
+    // stretch where no pose was detected.
+    const POSE_MAX_GAP_S = 0.25;
+
+    let pose = null;          // { t, xy, width, height, landmarks }
+    let poseEdgeIdx = [];     // POSE_EDGES resolved to column indices
+    let poseNoseIdx = -1;
+    let poseCursor = 0;       // monotonic cursor into pose.t
+    let poseRaf = 0;
+    let objectUrl = null;
+    // Set only in the no-video fallback, where nothing drives video.currentTime.
+    let standaloneTime = null;
+
+    function currentPoseTime() {
+      return standaloneTime !== null ? standaloneTime : (poseVideo.currentTime || 0);
+    }
+
+    function resolvePoseIndices(names) {
+      const byName = new Map(names.map((n, i) => [n, i]));
+      poseEdgeIdx = POSE_EDGES
+        .map(([a, b]) => [byName.get(a), byName.get(b)])
+        .filter(([a, b]) => a !== undefined && b !== undefined);
+      poseNoseIdx = byName.has("nose") ? byName.get("nose") : -1;
+    }
+
+    function sizePoseCanvas() {
+      const rect = poseWrap.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const dpr = window.devicePixelRatio || 1;
+      poseCanvas.width = Math.round(rect.width * dpr);
+      poseCanvas.height = Math.round(rect.height * dpr);
+      drawPoseAtCurrentTime();
+    }
+
+    // Find the sampled frame nearest `target` seconds. pose.t is sorted, and
+    // playback moves in small steps, so walk the cursor instead of re-searching.
+    function frameAt(target) {
+      const t = pose.t;
+      while (poseCursor < t.length - 1 && t[poseCursor + 1] <= target) poseCursor++;
+      while (poseCursor > 0 && t[poseCursor] > target) poseCursor--;
+      const next = poseCursor + 1;
+      if (next < t.length && Math.abs(t[next] - target) < Math.abs(t[poseCursor] - target)) {
+        poseCursor = next;
+      }
+      return poseCursor;
+    }
+
+    function drawPoseAtCurrentTime() {
+      const ctx = poseCanvas.getContext("2d");
+      const dpr = window.devicePixelRatio || 1;
+      const w = poseCanvas.width / dpr;
+      const h = poseCanvas.height / dpr;
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      if (!pose || !pose.t.length) return;
+
+      const now = currentPoseTime();
+      const i = frameAt(now);
+      if (Math.abs(pose.t[i] - now) > POSE_MAX_GAP_S) return;
+      const row = pose.xy[i];
+
+      // Scale strokes with the panel so the figure reads the same at any width.
+      const unit = Math.max(w, h) / 640;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+
+      // Dark under-stroke keeps the figure legible over light clothing.
+      for (const pass of [
+        { color: "rgba(10, 22, 32, 0.55)", width: 7.5 * unit },
+        { color: "#5ec4b6", width: 4 * unit },
+      ]) {
+        ctx.strokeStyle = pass.color;
+        ctx.lineWidth = pass.width;
+        ctx.beginPath();
+        for (const [a, b] of poseEdgeIdx) {
+          ctx.moveTo(row[a * 2] * w, row[a * 2 + 1] * h);
+          ctx.lineTo(row[b * 2] * w, row[b * 2 + 1] * h);
+        }
+        ctx.stroke();
+      }
+
+      // Joints.
+      ctx.fillStyle = "#f3f7f4";
+      const seen = new Set(poseEdgeIdx.flat());
+      for (const j of seen) {
+        ctx.beginPath();
+        ctx.arc(row[j * 2] * w, row[j * 2 + 1] * h, 3.2 * unit, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (poseNoseIdx >= 0) {
+        ctx.beginPath();
+        ctx.arc(row[poseNoseIdx * 2] * w, row[poseNoseIdx * 2 + 1] * h, 9 * unit, 0, Math.PI * 2);
+        ctx.strokeStyle = "#5ec4b6";
+        ctx.lineWidth = 3 * unit;
+        ctx.stroke();
+      }
+    }
+
+    function poseLoop() {
+      drawPoseAtCurrentTime();
+      poseRaf = requestAnimationFrame(poseLoop);
+    }
+
+    function startPoseLoop() {
+      if (!poseRaf) poseRaf = requestAnimationFrame(poseLoop);
+    }
+
+    function stopPoseLoop() {
+      if (poseRaf) cancelAnimationFrame(poseRaf);
+      poseRaf = 0;
+      drawPoseAtCurrentTime();
+    }
+
+    poseVideo.addEventListener("play", startPoseLoop);
+    poseVideo.addEventListener("pause", stopPoseLoop);
+    poseVideo.addEventListener("ended", stopPoseLoop);
+    poseVideo.addEventListener("seeked", drawPoseAtCurrentTime);
+    poseVideo.addEventListener("loadeddata", sizePoseCanvas);
+
+    // iPhone .MOV clips are HEVC: Safari and most Chrome desktop builds decode
+    // them, Firefox and Chrome-on-Linux often can't. Fall back to the skeleton
+    // on its own rather than showing an empty box.
+    poseVideo.addEventListener("error", useSkeletonOnly);
+
+    function useSkeletonOnly() {
+      if (poseWrap.classList.contains("no-video")) return;
+      poseWrap.classList.add("no-video");
+      poseNote.textContent =
+        "Your browser can’t play this video format, so the wireframe is shown on its own.";
+      sizePoseCanvas();
+      // Nothing is driving currentTime now, so animate the skeleton directly.
+      if (pose && pose.t.length) playSkeletonStandalone();
+    }
+
+    function playSkeletonStandalone() {
+      const span = pose.t[pose.t.length - 1] - pose.t[0];
+      if (span <= 0) return;
+      const start = performance.now();
+      const tick = () => {
+        standaloneTime = pose.t[0] + ((performance.now() - start) / 1000) % span;
+        drawPoseAtCurrentTime();
+        poseRaf = requestAnimationFrame(tick);
+      };
+      if (poseRaf) cancelAnimationFrame(poseRaf);
+      standaloneTime = pose.t[0];
+      poseRaf = requestAnimationFrame(tick);
+    }
+
+    new ResizeObserver(sizePoseCanvas).observe(poseWrap);
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files[0];
+      fileLabel.textContent = file?.name || "Choose a video…";
+      if (!file) return;
+
+      // Play the clip straight from the local File — nothing is re-downloaded
+      // from the server, and the preview is available before scoring finishes.
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrl = URL.createObjectURL(file);
+      pose = null;
+      poseCursor = 0;
+      standaloneTime = null;
+      poseWrap.classList.remove("no-video");
+      poseNote.textContent = "";
+      poseVideo.src = objectUrl;
+      posePanel.classList.add("visible");
+    });
+
+    function showError(msg) {
+      statusEl.textContent = msg;
+      statusEl.classList.add("error");
+      results.classList.remove("visible");
+    }
+
+    /* ---------- per-stroke feature readout ---------- */
+
+    function prettyFeatureName(key) {
+      const words = key.replace(/_/g, " ").trim();
+      return words.charAt(0).toUpperCase() + words.slice(1);
+    }
+
+    // Keys come straight from the response, so changing the extractor list
+    // server-side flows through with no edit here.
+    function showStrokeFeatures(stroke) {
+      if (!stroke || !stroke.features) {
+        featuresBox.style.display = "none";
+        return;
+      }
+      featuresBox.style.display = "block";
+      featuresTitle.textContent =
+        `Stroke ${stroke.stroke} · score ${Number(stroke.predicted_grade).toFixed(1)}`;
+      featuresList.replaceChildren();
+      for (const [key, value] of Object.entries(stroke.features)) {
+        const dt = document.createElement("dt");
+        dt.textContent = prettyFeatureName(key);
+        const dd = document.createElement("dd");
+        dd.textContent = Number(value).toFixed(2);
+        featuresList.append(dt, dd);
+      }
+    }
+
+    function renderResults(data) {
+      const strokes = data.strokes || [];
+      const grades = strokes.map((s) => s.predicted_grade);
+      const labels = strokes.map((s) => String(s.stroke));
+
+      avgScore.textContent = Number(data.predicted_grade_mean).toFixed(1);
+      scoreMeta.textContent = `${data.strokes_detected} stroke${data.strokes_detected === 1 ? "" : "s"} detected`;
+      results.classList.add("visible");
+
+      if (data.pose && data.pose.xy && data.pose.xy.length) {
+        pose = data.pose;
+        poseCursor = 0;
+        resolvePoseIndices(pose.landmarks);
+        if (pose.width && pose.height) {
+          poseWrap.style.setProperty("--pose-aspect", `${pose.width} / ${pose.height}`);
+        }
+        posePanel.classList.add("visible");
+        sizePoseCanvas();
+        if (poseWrap.classList.contains("no-video")) playSkeletonStandalone();
+      }
+
+      // Default to the best stroke; the chart's onClick swaps it below.
+      const best = strokes.reduce(
+        (a, b) => (b.predicted_grade > a.predicted_grade ? b : a),
+        strokes[0],
+      );
+      showStrokeFeatures(best);
+
+      if (chart) chart.destroy();
+      const ctx = document.getElementById("stroke-chart").getContext("2d");
+      chart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label: "Stroke quality",
+            data: grades,
+            borderColor: "#5ec4b6",
+            backgroundColor: "rgba(94, 196, 182, 0.18)",
+            borderWidth: 3,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointBackgroundColor: "#f3f7f4",
+            pointBorderColor: "#2a9d8f",
+            pointBorderWidth: 2,
+            fill: true,
+            tension: 0.25,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          onClick: (_evt, elements) => {
+            if (elements.length) showStrokeFeatures(strokes[elements[0].index]);
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: (items) => `Stroke ${items[0].label}`,
+                label: (item) => `Score: ${item.formattedValue}`,
+              },
+            },
+          },
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: "Stroke",
+                color: "rgba(243, 247, 244, 0.7)",
+                font: { family: "Fraunces", size: 14, weight: "700" },
+              },
+              ticks: { color: "rgba(243, 247, 244, 0.75)" },
+              grid: { color: "rgba(243, 247, 244, 0.08)" },
+            },
+            y: {
+              title: {
+                display: true,
+                text: "Quality score",
+                color: "rgba(243, 247, 244, 0.7)",
+                font: { family: "Fraunces", size: 14, weight: "700" },
+              },
+              ticks: { color: "rgba(243, 247, 244, 0.75)" },
+              grid: { color: "rgba(243, 247, 244, 0.08)" },
+            },
+          },
+        },
+      });
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      statusEl.classList.remove("error");
+      statusEl.textContent = "Uploading and scoring… this can take a minute.";
+      results.classList.remove("visible");
+      submitBtn.disabled = true;
+
+      const body = new FormData();
+      body.append("video", file);
+
+      try {
+        const res = await fetch("/predict", { method: "POST", body });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          showError(data.error || "Scoring failed.");
+          return;
+        }
+        statusEl.textContent = "";
+        renderResults(data);
+      } catch (err) {
+        showError("Request failed. Is the server running?");
+        console.error(err);
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
