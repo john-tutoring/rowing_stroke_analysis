@@ -26,4 +26,4 @@ COPY artifacts/model.joblib artifacts/model_meta.json ./artifacts/
 ENV PORT=8080
 EXPOSE 8080
 
-CMD ["sh", "-c", "gunicorn -b 0.0.0.0:${PORT} -t 120 --workers 1 app:app"]
+CMD ["sh", "-c", "gunicorn -b 0.0.0.0:${PORT} -t 300 --workers 1 app:app"]

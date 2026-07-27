@@ -23,19 +23,24 @@
       </div>
       <button type="submit" id="submit">Analyze</button>
     </form>
+    <p class="upload-note">Videos up to 200&nbsp;MB — larger files may take much longer to analyze.</p>
 
     <p class="status" id="status" aria-live="polite"></p>
 
     <section class="video-panel" id="video-panel">
-      <div class="pose-wrap" id="pose-wrap">
+      <div class="pose-wrap empty" id="pose-wrap">
+        <div class="pose-placeholder">Your video appears here</div>
         <video id="pose-video" playsinline controls muted preload="metadata"></video>
         <canvas id="pose-canvas"></canvas>
-        <div class="stroke-badge" id="stroke-badge" hidden></div>
+        <div class="stroke-badge" id="stroke-badge" hidden>
+          <span class="badge-stroke" id="badge-stroke"></span>
+          <span class="badge-score" id="badge-score"></span>
+        </div>
       </div>
       <p class="pose-note" id="pose-note"></p>
     </section>
 
-    <section id="analysis" hidden>
+    <section id="analysis">
       <nav class="tabs" role="tablist" id="tabs">
         <button type="button" data-tab="frames" class="active" role="tab" aria-selected="true">Frame analysis</button>
         <button type="button" data-tab="strokes" role="tab" aria-selected="false">Stroke analysis</button>
@@ -83,6 +88,7 @@
       <section id="panel-strokes" class="panel" role="tabpanel" hidden>
         <p class="panel-hint">Each bar is one stroke, colored by its score. The wireframe takes the color of the stroke being played.</p>
         <div class="chart-wrap">
+          <p class="chart-empty" id="chart-empty">Stroke scores appear here after analysis.</p>
           <canvas id="stroke-chart"></canvas>
         </div>
         <fieldset class="feature-radios" id="feature-radios">

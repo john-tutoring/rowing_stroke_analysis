@@ -6,23 +6,49 @@ const statusEl = document.getElementById("status");
 const fileInput = document.getElementById("video");
 const fileLabel = document.getElementById("file-label");
 const submitBtn = document.getElementById("submit");
-const videoPanel = document.getElementById("video-panel");
 const poseWrap = document.getElementById("pose-wrap");
 const poseVideo = document.getElementById("pose-video");
 const poseCanvas = document.getElementById("pose-canvas");
 const poseNote = document.getElementById("pose-note");
 const strokeBadge = document.getElementById("stroke-badge");
-const analysis = document.getElementById("analysis");
+const badgeStroke = document.getElementById("badge-stroke");
+const badgeScore = document.getElementById("badge-score");
+const chartEmpty = document.getElementById("chart-empty");
 const tabsNav = document.getElementById("tabs");
 const avgValue = document.getElementById("avg-value");
 
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-/* ---------- grade → color (0 red … 110 green, clamped) ---------- */
+/* ---------- grade → color (0 red … 110 green) ---------- */
+
+// Absolute hue on the fixed 0–110 scale.
+function absHue(grade) {
+  return (120 * Math.min(110, Math.max(0, grade))) / 110;
+}
+
+// The absolute scale alone makes a uniformly good video all near-identical
+// greens, so per video we widen the spectrum: the best stroke keeps its true
+// color and the worst is pulled redder until the hues span at least MIN_HUE_SPREAD.
+const MIN_HUE_SPREAD = 50;
+let scale = { gMin: 0, gMax: 110, hueLow: 0, hueHigh: 120 };
+
+function setGradeScale(gradeList) {
+  const gMin = Math.min(...gradeList);
+  const gMax = Math.max(...gradeList);
+  const hueHigh = absHue(gMax);
+  const hueLow = Math.min(absHue(gMin), Math.max(0, hueHigh - MIN_HUE_SPREAD));
+  scale = { gMin, gMax, hueLow, hueHigh };
+}
 
 function gradeColor(grade, light = 55) {
-  const g = Math.min(110, Math.max(0, grade));
-  return `hsl(${Math.round((120 * g) / 110)} 75% ${light}%)`;
+  let hue;
+  if (scale.gMax === scale.gMin) {
+    hue = absHue(grade);
+  } else {
+    const t = Math.min(1, Math.max(0, (grade - scale.gMin) / (scale.gMax - scale.gMin)));
+    hue = scale.hueLow + t * (scale.hueHigh - scale.hueLow);
+  }
+  return `hsl(${Math.round(hue)} 75% ${light}%)`;
 }
 
 /* ---------- per-tab config ---------- */
@@ -239,7 +265,8 @@ function updateForRow(row) {
 
   const k = row >= 0 && strokeOfRow ? strokeOfRow[row] : -1;
   if (currentTab === "strokes" && k >= 0) {
-    strokeBadge.textContent = `Stroke ${k + 1} · ${grades[k].toFixed(1)}`;
+    badgeStroke.textContent = `Stroke ${k + 1}`;
+    badgeScore.textContent = grades[k].toFixed(1);
     strokeBadge.style.color = gradeColor(grades[k], 65);
     strokeBadge.hidden = false;
   } else {
@@ -324,6 +351,29 @@ tabsNav.addEventListener("click", (e) => {
 
 /* ---------- upload flow ---------- */
 
+// Blank out every readout so a newly chosen video starts from a clean slate.
+function resetAnalysis() {
+  data = null;
+  pose = null;
+  poseCursor = 0;
+  lastRow = -1;
+  standaloneTime = null;
+  strokeBadge.hidden = true;
+  if (chart) { chart.destroy(); chart = null; }
+  chartEmpty.hidden = false;
+  for (const { el } of READOUTS) el.textContent = "—";
+  avgValue.textContent = "—";
+  avgValue.style.color = "";
+  for (const id of ["sum-strokes", "sum-rate", "sum-avg", "sum-best", "sum-worst", "sum-consistency"]) {
+    const el = document.getElementById(id);
+    el.textContent = "—";
+    el.style.color = "";
+  }
+  for (const id of ["sum-strokes-sub", "sum-best-sub", "sum-worst-sub", "sum-consistency-sub"]) {
+    document.getElementById(id).textContent = "";
+  }
+}
+
 fileInput.addEventListener("change", () => {
   const file = fileInput.files[0];
   fileLabel.textContent = file?.name || "Choose a video…";
@@ -333,24 +383,15 @@ fileInput.addEventListener("change", () => {
   // from the server, and the preview is available before scoring finishes.
   if (objectUrl) URL.revokeObjectURL(objectUrl);
   objectUrl = URL.createObjectURL(file);
-  data = null;
-  pose = null;
-  poseCursor = 0;
-  lastRow = -1;
-  standaloneTime = null;
-  strokeBadge.hidden = true;
-  analysis.hidden = true;
-  if (chart) { chart.destroy(); chart = null; }
-  poseWrap.classList.remove("no-video");
+  resetAnalysis();
+  poseWrap.classList.remove("no-video", "empty");
   poseNote.textContent = "";
   poseVideo.src = objectUrl;
-  videoPanel.classList.add("visible");
 });
 
 function showError(msg) {
   statusEl.textContent = msg;
   statusEl.classList.add("error");
-  analysis.hidden = true;
 }
 
 form.addEventListener("submit", async (e) => {
@@ -390,6 +431,7 @@ function renderResults(payload) {
   poseCursor = 0;
   lastRow = -2;
   grades = payload.strokes.map((s) => s.predicted_grade);
+  setGradeScale(grades);
   resolvePoseIndices(pose.landmarks);
 
   // Row index → stroke, for O(1) lookup while drawing. Ranges are inclusive
@@ -400,8 +442,6 @@ function renderResults(payload) {
   if (pose.width && pose.height) {
     poseWrap.style.setProperty("--pose-aspect", `${pose.width} / ${pose.height}`);
   }
-  videoPanel.classList.add("visible");
-  analysis.hidden = false;
 
   avgValue.textContent = Number(payload.predicted_grade_mean).toFixed(1);
   avgValue.style.color = gradeColor(payload.predicted_grade_mean, 60);
@@ -417,6 +457,7 @@ function renderResults(payload) {
 /* ---------- Tab 2: stroke chart + feature overlay ---------- */
 
 function buildChart() {
+  chartEmpty.hidden = true;
   const ctx = document.getElementById("stroke-chart").getContext("2d");
   chart = new Chart(ctx, {
     type: "bar",
@@ -429,6 +470,7 @@ function buildChart() {
         borderRadius: 4,
         maxBarThickness: 42,
         yAxisID: "y",
+        order: 2, // higher order draws first, so the feature line lands on top
       }],
     },
     options: {
@@ -481,6 +523,7 @@ function applyFeatureOverlay() {
       pointRadius: 3,
       pointBackgroundColor: "#e8eaed",
       yAxisID: "y1",
+      order: 1,
     });
   }
   chart.options.scales.y1.display = Boolean(key);

@@ -28,8 +28,8 @@ from split_strokes import right_side_closer, split_cycles_with_ranges, x_dif_bet
 APP_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = APP_DIR / "uploads"
 MODEL_PATH = Path(os.environ.get("MODEL_PATH", APP_DIR / "artifacts" / "model.joblib"))
-# ~100 MB — plenty for a typical 2-minute phone video
-MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+# ~200 MB — long clips fit, but the UI warns that big files take much longer
+MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES

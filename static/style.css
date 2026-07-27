@@ -104,6 +104,12 @@ button[type="submit"] {
 button[type="submit"]:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
 button[type="submit"]:disabled { opacity: 0.5; cursor: wait; }
 
+.upload-note {
+  margin: -0.5rem 0 1rem;
+  color: var(--ink-dim);
+  font-size: 0.85rem;
+}
+
 .status {
   min-height: 1.4rem;
   margin: 0 0 1rem;
@@ -114,9 +120,6 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: wait; }
 .status.error { color: #f0a48f; }
 
 /* ---------- video + wireframe overlay ---------- */
-
-.video-panel { display: none; }
-.video-panel.visible { display: block; animation: rise 0.4s ease both; }
 
 @keyframes rise {
   from { opacity: 0; transform: translateY(10px); }
@@ -140,6 +143,27 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: wait; }
   height: auto;
 }
 
+/* Before any video is chosen: an empty placeholder box at 16:9. */
+.pose-wrap.empty {
+  aspect-ratio: 16 / 9;
+  border: 1px dashed var(--line);
+}
+
+.pose-wrap.empty video { display: none; }
+
+.pose-placeholder {
+  display: none;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-dim);
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.pose-wrap.empty .pose-placeholder { display: flex; }
+
 .pose-wrap.no-video video { display: none; }
 
 .pose-wrap.no-video {
@@ -157,18 +181,32 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: wait; }
   pointer-events: none;
 }
 
+.stroke-badge[hidden],
+.chart-empty[hidden] { display: none; }
+
 .stroke-badge {
   position: absolute;
   top: 0.75rem;
   left: 0.75rem;
-  padding: 0.35rem 0.75rem;
-  border-radius: 999px;
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 1rem 0.65rem;
+  border-radius: 16px;
   background: rgba(13, 15, 18, 0.75);
-  font-size: 0.95rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  line-height: 1.3;
   pointer-events: none;
+}
+
+.badge-stroke {
+  font-size: clamp(1.1rem, 3.5vw, 1.9rem);
+  line-height: 1.2;
+}
+
+.badge-score {
+  font-size: clamp(2.2rem, 7vw, 3.8rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
 }
 
 .pose-note {
@@ -293,6 +331,17 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: wait; }
 
 @media (max-width: 480px) {
   .chart-wrap { height: 240px; }
+}
+
+.chart-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 0.95rem;
 }
 
 .feature-radios {
